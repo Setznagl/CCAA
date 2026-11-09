@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CCAA — __HEADING__</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body data-flow="__FLOW__">
+  <header>
+    <div><strong>CCAA</strong><span class="muted"> / Teste de HTML</span></div>
+    <p class="mode">Somente geração e download de HTML. Sem envio de email.</p>
+    <nav aria-label="Páginas de teste">
+      <a href="/mari" data-nav="mari">Auditoria Mari</a>
+      <a href="/aulas-praticas" data-nav="aulas-praticas">Aulas práticas</a>
+    </nav>
+  </header>
+  <main>
+    <section class="controls" aria-labelledby="page-title">
+      <h1 id="page-title">__HEADING__</h1>
+      <p>Base local: <code>__FOLDER__</code></p>
+      <p class="note">__NOTE__</p>
+      <form id="form">
+        <label id="record-label" for="record">Registro</label>
+        <select id="record" required disabled><option value="">Carregando bases…</option></select>
+        <div id="date-control" hidden>
+          <label for="reference-date">Data usada nos avisos do email</label>
+          <input id="reference-date" type="date" required>
+          <p class="hint">Para comparar com a prévia salva de Mari, use 11/09/2026. As datas das auditorias não são alteradas.</p>
+        </div>
+        <button id="generate" type="submit" disabled>Gerar HTML de teste</button>
+      </form>
+      <p id="status" role="status" aria-live="polite">Lendo as bases recebidas…</p>
+      <a id="download" class="download" aria-disabled="true" tabindex="-1">Baixar HTML gerado</a>
+      <p class="hint">Os controles usam visual neutro temporário. O HTML do email conserva o layout atual. As correções de lógica estão adiadas.</p>
+    </section>
+    <section class="result" aria-labelledby="result-title">
+      <div class="result-heading"><h2 id="result-title">Prévia do email</h2><span id="result-label" class="muted">Nenhum HTML gerado</span></div>
+      <iframe id="preview" title="Prévia isolada do HTML gerado" sandbox referrerpolicy="no-referrer"></iframe>
+      <p class="hint">A prévia é isolada e bloqueia scripts, formulários e recursos externos. O download contém o HTML original gerado, sem o painel de teste.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Dados e fontes recebidas: manter somente na máquina local
+/rev/
+/references/
+/testes/evidence/
+
+# Ambientes, caches e segredos
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
