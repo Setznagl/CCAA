@@ -8,9 +8,9 @@ import threading
 from urllib.parse import parse_qs, urlsplit
 
 FLOW_PAGES = {
-    '/mari': ('mari', 'Auditoria Mari', 'Disparo Auditoria Mari',
+    '/mari': ('mari', 'Auditoria Mari', 'AGENDA_SEMANAL_AUDITORIAS',
               'Reprodução isolada do HTML de Mari; não executa VBA ou Excel.'),
-    '/aulas-praticas': ('aulas-praticas', 'Aulas práticas', 'DisparoAulasPraticas',
+    '/aulas-praticas': ('aulas-praticas', 'Aulas práticas', 'REGULARIZACAO_AUDITORIA_ACADEMICA',
                       'Reutiliza as funções de dados e HTML do Python atual. Este teste do corpo não lê destinatários nem carrega funções de envio.'),
 }
 HTML_POLICY = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; sandbox"
@@ -28,10 +28,10 @@ def make_server(root, port=8876):
             if flow not in cache:
                 if flow == 'mari':
                     from preview_mari import load_mari
-                    cache[flow] = load_mari(root / 'rev/Disparo Auditoria Mari')
+                    cache[flow] = load_mari(root / 'fluxos/AGENDA_SEMANAL_AUDITORIAS')
                 elif flow == 'aulas-praticas':
                     from preview_aulas import load_aulas
-                    cache[flow] = load_aulas(root / 'rev/DisparoAulasPraticas')
+                    cache[flow] = load_aulas(root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA')
                 else:
                     raise ValueError('Frente desconhecida')
             return cache[flow]

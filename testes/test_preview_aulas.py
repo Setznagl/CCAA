@@ -9,7 +9,7 @@ from unittest.mock import patch
 import openpyxl
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'rev/DisparoAulasPraticas/disparar_emails.py'
+SOURCE = ROOT / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA/disparar_emails.py'
 
 
 def sheet(path, headers, rows):

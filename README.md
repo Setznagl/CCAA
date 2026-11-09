@@ -45,7 +45,7 @@ py -m venv .venv
 
 Selecione um registro, gere o HTML, confira a prévia e baixe o arquivo. O serviço escuta somente em loopback; não publique a porta com bases pessoais.
 
-Detalhes e testes: [testes/README.md](testes/README.md). A suíte completa requer a cópia local de `rev/`; dados reais, evidências geradas e ambiente virtual ficam ignorados pelo Git.
+Detalhes e testes: [testes/README.md](testes/README.md). A suíte completa requer a cópia local de `fluxos`; dados reais, evidências geradas e ambiente virtual ficam ignorados pelo Git.
 
 ## Escopo preservado
 

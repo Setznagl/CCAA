@@ -5,7 +5,7 @@ Este é o mapa do funcionamento atual: VBA embutido em Mari e Python da raiz de 
 ## Referências de arquivos
 
 - **Mari / XLSM:** `rev/Disparo Auditoria Mari/Disparador_auditoria_automatizado_FINAL(1).xlsm`.
-- **Python vigente:** `rev/DisparoAulasPraticas/disparar_emails.py`.
+- **Python vigente:** `../rev/Regularização da Auditoria Acadêmica`.
 - **Master do Python:** `rev/DisparoAulasPraticas/Base de Polos - Master (1).xlsb`; primeira aba `BASE_DE_UNIDADES` e aba `CONTATOS_PARCEIROS`.
 - Abreviação **planilhas de sequência**: `sequenciaa1.xlsx`, `sequenciaa2.xlsx`, `sequencia3.xlsx`, `sequencia4.xlsx`, na pasta de AulasPraticas.
 

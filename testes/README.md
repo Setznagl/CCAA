@@ -4,7 +4,7 @@ Ambiente local de inspeção, sem integração com serviços de email e sem exec
 
 ## Abrir as páginas
 
-Na raiz do seu clone, após copiar a pasta `rev/` original conforme o README principal, execute:
+Na raiz do seu clone, após copiar a pasta `../fluxos` original conforme o README principal, execute:
 
 ```sh
 .venv/bin/python testes/preview_server.py --port 8876
@@ -49,7 +49,7 @@ Para inspecionar o corpo HTML, lê as quatro planilhas de sequência e `labs.xls
 
 - Correções de lógica/checagens de negócio continuam adiadas em `docs/CCAA-pontos-de-atencao-adiados.md`.
 - Não há envio, rascunhos Outlook, atualização SharePoint nem alteração das fontes recebidas.
-- Usa as bases locais recebidas, que ficam fora do Git e precisam ser copiadas para `rev/`; upload/importação pela interface não faz parte desta etapa.
+- Usa as bases locais recebidas, que ficam fora do Git e precisam ser copiadas para `../fluxos`; upload/importação pela interface não faz parte desta etapa.
 - Os dados são carregados na primeira utilização e mantidos em memória. Reinicie o servidor após mudar arquivos para uma nova rodada de teste.
 - Os controles usam visual neutro temporário, autorizado pelo usuário. O HTML do email mantém seu estilo atual. A referência final LIRA permanece para a etapa visual posterior.
 - Navegador não certifica renderização no Outlook/Gmail nem entrega de email.

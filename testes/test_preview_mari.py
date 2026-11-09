@@ -4,7 +4,7 @@ from datetime import date, datetime
 from pathlib import Path
 import unittest
 
-SOURCE = Path(__file__).resolve().parents[1] / 'rev' / 'Disparo Auditoria Mari'
+SOURCE = Path(__file__).resolve().parents[1] / 'fluxos' / 'AGENDA_SEMANAL_AUDITORIAS'
 MODULE = Path(__file__).with_name('preview_mari.py')
 
 
