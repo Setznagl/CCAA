@@ -8,6 +8,7 @@ from pathlib import Path
 import threading
 from urllib.parse import parse_qs, urlsplit
 import uuid
+from gerencial import key as directory_key, load_directory, recipients, review_recipients, support_contacts
 
 FLOW_PAGES = {
     '/mari': ('mari', 'Agenda Semanal de Auditorias', 'AGENDA_SEMANAL_AUDITORIAS',
@@ -40,9 +41,11 @@ def make_server(root, port=8876):
     def models(flow):
         with lock:
             if flow not in cache:
+                if '_directory' not in cache:
+                    cache['_directory'] = load_directory(root / 'databases/09-11-26')
                 if flow == 'mari':
                     from preview_AGENDA_SEMANAL_AUDITORIAS import load_mari
-                    cache[flow] = load_mari(root)
+                    cache[flow] = load_mari(root, cache['_directory'])
                 elif flow == 'aulas-praticas':
                     from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import load_aulas
                     cache[flow] = load_aulas(root / 'databases/09-11-26')
@@ -119,7 +122,7 @@ def make_server(root, port=8876):
                 else:
                     self.reply(404)
                 return
-            if path in {'/app.js', '/app.css', '/steps.js', '/consolidado.js', '/mari.js', '/aulas.js'}:
+            if path in {'/app.js', '/app.css', '/steps.js', '/contacts.js', '/consolidado.js', '/mari.js', '/aulas.js'}:
                 kind = 'text/javascript' if path.endswith('.js') else 'text/css'
                 self.reply(200, (web / path[1:]).read_bytes(), kind + '; charset=utf-8')
                 return
@@ -155,10 +158,17 @@ def make_server(root, port=8876):
                     return
                 records = models(flow)
                 if action == 'options':
-                    self.json_reply(200, {'today': date.today().isoformat(), 'options': [
-                        {'id': key, 'label': item['label'], 'polo_count': item['polo_count']}
-                        for key, item in records.items()
-                    ]})
+                    options = []
+                    labels = [item['label'] for item in records.values()]
+                    for identity, item in records.items():
+                        label = item['label']
+                        if labels.count(label) > 1:
+                            draft = item['draft']
+                            polos = draft.get('polos') or [r['polo'] for r in draft.get('rows', [])]
+                            email = cache['_directory']['polos'].get(directory_key(polos[0]), {}).get('email', '') if polos else ''
+                            label += ' — ' + (email or 'email pendente')
+                        options.append({'id': identity, 'label': label, 'polo_count': item['polo_count']})
+                    self.json_reply(200, {'today': date.today().isoformat(), 'options': options})
                     return
                 args = parse_qs(target.query, max_num_fields=4)
                 identity = args.get('id', [''])[0]
@@ -168,14 +178,21 @@ def make_server(root, port=8876):
                 if action == 'draft':
                     if flow == 'aulas-praticas':
                         from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import draft_aulas
-                        self.json_reply(200, {'draft': draft_aulas(records[identity]),
+                        draft = draft_aulas(records[identity])
+                        draft['destinatarios'] = recipients([records[identity]['nome']], cache['_directory'])
+                        self.json_reply(200, {'draft': draft, 'auditores': cache['_directory']['auditores'],
                                              'warnings': ['Sem linhas na timeline não comprova ausência de auditoria. As fontes não certificam prazos vigentes.']})
                         return
                     if flow not in {'auditoria-situacao-polos', 'mari'}:
                         self.json_reply(404, {'error': 'Esta frente não possui formulário complementar'})
                         return
                     record = records[identity]
-                    self.json_reply(200, {key: record[key] for key in ('draft', 'warnings', 'source_cycles')})
+                    draft = dict(record['draft'])
+                    if flow == 'auditoria-situacao-polos':
+                        draft['destinatarios'] = recipients(draft['polos'], cache['_directory'])
+                        draft['contatos'] = [dict(contact, origem=index) for index, contact in enumerate(draft['contatos'])]
+                    self.json_reply(200, {'draft': draft, 'warnings': record['warnings'],
+                                         'source_cycles': record['source_cycles'], 'auditores': cache['_directory']['auditores']})
                     return
                 if flow in {'auditoria-situacao-polos', 'mari', 'aulas-praticas'}:
                     self.json_reply(405, {'error': 'Use o formulário para gerar esta prévia com POST'})
@@ -213,28 +230,59 @@ def make_server(root, port=8876):
                     self.json_reply(404, {'error': 'Selecione um gestor disponível ou o preenchimento manual'})
                     return
                 record = records[identity]
+                draft = dict(payload['draft'])
+                submitted_contacts = draft.pop('destinatarios', None)
                 if flow == 'aulas-praticas':
                     from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import review_aulas, render_aulas
-                    html = render_aulas(review_aulas(payload['draft'], record))
+                    reviewed = review_aulas(draft, record)
+                    selected = [record['nome']]
+                    html = render_aulas(reviewed)
                 elif flow == 'mari':
                     from preview_AGENDA_SEMANAL_AUDITORIAS import review_mari, render_mari
                     reference = payload.get('date')
                     if not isinstance(reference, str) or len(reference) != 10:
                         raise ValueError('Informe a data de referência dos avisos')
                     today = date.fromisoformat(reference)
-                    html = render_mari(review_mari(payload['draft'], record), today)
+                    reviewed = review_mari(draft, record)
+                    selected = list(dict.fromkeys(row['polo'] for row in reviewed['rows']))
+                    html = render_mari(reviewed, today).replace('GERENTE OPERACIONAL', 'GESTOR DO POLO')
                 else:
-                    selected = payload['draft'].get('polos', [])
+                    selected = draft.get('polos', [])
                     if not isinstance(selected, list) or any(not isinstance(polo, str) for polo in selected):
                         raise ValueError('polos: informe uma lista de nomes de polos')
                     removed = set(record['draft']['polos']) - set(selected)
                     warnings = [warning for warning in record['warnings']
                                 if not any(warning.startswith(polo + ':') for polo in removed)]
                     from preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS import render_consolidado
+                    reviewed_contacts = review_recipients(submitted_contacts, selected, cache['_directory'])
+                    original_contacts = record['draft']['contatos']
+                    entered_contacts = draft.get('contatos', [])
+                    if not isinstance(entered_contacts, list):
+                        raise ValueError('Contatos: informe uma lista de contatos')
+                    current_contacts = support_contacts(reviewed_contacts)
+                    source_contacts = support_contacts(recipients(selected, cache['_directory']))
+                    draft['contatos'] = []
+                    for entry in entered_contacts:
+                        if not isinstance(entry, dict):
+                            raise ValueError('Contato inválido')
+                        contact = dict(entry)
+                        origin = contact.pop('origem', None)
+                        if origin is not None:
+                            if type(origin) is not int or not 0 <= origin < len(original_contacts):
+                                raise ValueError('Origem do contato inválida')
+                            if original_contacts[origin] not in source_contacts:
+                                continue
+                        elif contact in original_contacts and contact not in source_contacts:
+                            continue
+                        draft['contatos'].append(contact)
+                    draft['contatos'].extend(c for c in current_contacts
+                                             if c not in original_contacts and c not in draft['contatos'])
                     sample = source_file(root, 'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
                                          'SITUACAO_REGULARIZACAO_DOS_POLOS', 'sample.html')
-                    html = render_consolidado(payload['draft'], sample,
+                    html = render_consolidado(draft, sample,
                                               source_cycles=record['source_cycles'], warnings=warnings)
+                if flow != 'auditoria-situacao-polos':
+                    review_recipients(submitted_contacts, selected, cache['_directory'])
                 token = uuid.uuid4().hex
                 filename = f'ccaa-{flow}.html'
                 with lock:

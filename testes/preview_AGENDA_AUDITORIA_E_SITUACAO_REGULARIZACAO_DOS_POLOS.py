@@ -14,8 +14,9 @@ from zipfile import BadZipFile
 import unicodedata
 
 import pandas as pd
+from gerencial import load_directory, recipients, support_contacts, person
 
-def _write_emails(data, names, contacts, operational):
+def _write_emails(data, names, directory, operational):
     """Exportação derivada; nunca fornece dados ao HTML."""
     temporary = None
     try:
@@ -39,14 +40,13 @@ def _write_emails(data, names, contacts, operational):
         ws.title = 'Emails'
         ws.append(['Polo', 'Email', 'Enviar'])
         for key in sorted(operational):
-            rows = [r for r in contacts.get(key, []) if _flag(r['Perfil']) == 'GESTOR PRINCIPAL']
+            row = directory['polos'].get(key, {})
             emails = {}
-            for row in rows:
-                for email in _text(row['E-mail']).split(';'):
-                    email = email.strip()
-                    if email:
-                        emails.setdefault(email.casefold(), email)
-            polo = _text(rows[0]['Polo']) if rows else key
+            for email in row.get('email', '').split(';'):
+                email = email.strip()
+                if email:
+                    emails.setdefault(email.casefold(), email)
+            polo = row.get('polo', key)
             values = [polo, ';'.join(emails[k] for k in sorted(emails)), '']
             # Excel interprets these prefixes even when the source is plain text.
             ws.append(["'" + v if v.lstrip().startswith(('=', '+', '-', '@')) else v for v in values])
@@ -109,8 +109,7 @@ def _empty_draft():
         'prazo_praticas': '', 'prazo_auditorias': '',
         'link_relatorio': 'https://prisma.kroton.com.br/comunicados/10484',
         'link_atendimento': 'https://app.smartsheet.com/b/publish?EQBCT=fbc7e2e80e684398ba2a34ec61cee9f6',
-        'contatos': [{'funcao': 'Auditoria acadêmica e laboratórios', 'nome': '',
-                      'email': 'auditoria.academica@kroton.com.br', 'telefone': ''}],
+        'contatos': [],
     }
 
 
@@ -121,67 +120,65 @@ def load_consolidado(root: Path) -> dict:
     data = Path(root) / 'databases/09-11-26'
     warnings = ['Checklist CL2026 sem base preenchida; informe nota, status, observação e auditor manualmente. Vereditos não equivalem ao checklist.',
                 'Prazos e contatos de apoio sem fonte ficam manuais; confirme antes de usar.']
-    names = ('auditoria-tabela-contatos.xlsx', 'auditoria-apps-prazo.xlsx',
-             'auditoria-timeline-262.xlsx', 'auditoria-polos-acompanhamento-262.xlsx')
+    names = ('auditoria-base-gerencial.xlsx', 'auditoria-apps-prazo.xlsx',
+             'auditoria-timeline-262.xlsx', 'auditoria-polos-acompanhamento-262.xlsx',
+             'auditoria-base-gerencial-contatos.xlsx')
     columns = (
-        ['Polo', 'Nome', 'E-mail', 'Perfil'],
+        [],
         ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'],
         ['Polo', 'semestre_operacional_x', 'Laboratório', 'Tipo auditoria', 'Auditor',
          'Agendada', 'Data agendada', 'Realizada', 'Data realização', 'Finalizada', 'Parecer Auditoria'],
         ['Polo', 'Rep. Sem Retorno'])
     sources, export_cycles = {}, {}
-    for name, required in zip(names, columns):
+    try:
+        directory = load_directory(data)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError, BadZipFile, ImportError):
+        directory = {'polos': {}, 'auditores': []}
+        warnings.append('Base gerencial ausente ou inválida; associação dos polos e contatos deve ser revisada manualmente.')
+    for name, required in zip(names[1:4], columns[1:]):
         grouped, cycles = {}, set()
         try:
             frame = pd.read_excel(data / name, sheet_name='Export', usecols=required)
             for row in frame.to_dict('records'):
                 polo = _text(row['Polo'])
-                if not polo:
-                    continue
-                if polo.startswith(('Applied filters:', 'Filtros aplicados:')):
+                if polo.casefold().startswith(('applied filters:', 'filtros aplicados:')):
                     cycles.update(_cycle(c) for c in re.findall(
                         r'semestre_operacional(?:_x)?\s+(?:is|é|=)\s*(\d{2}\.?[12])\b', polo))
                     continue
-                grouped.setdefault(_key(polo), []).append(row)
+                if not person(polo) or _flag(polo) in ('N/A', 'NA', 'N/D', '--', 'SELECIONE'):
+                    continue
+                grouped.setdefault(_flag(polo), []).append(row)
             sources[name] = grouped
         except (OSError, ValueError, KeyError, TypeError, OverflowError, BadZipFile, ImportError):
             sources[name] = {}
             warnings.append(f'Fonte {name} ausente ou inválida; complete a seção manualmente.')
         export_cycles[name] = cycles
-    contacts, apps, timeline, followup = (sources[n] for n in names)
+    apps, timeline, followup = (sources[n] for n in names[1:4])
     operational = set(apps) | set(timeline) | set(followup)
-    groups, manager_emails = {}, {}
+    groups = {}
     association_warnings = []
     for key in sorted(operational):
-        found = False
-        for row in contacts.get(key, []):
-            if _flag(row['Perfil']) != 'GESTOR PRINCIPAL':
-                continue
-            manager = _text(row['Nome'])
-            if not manager:
-                association_warnings.append(f'{_text(row["Polo"])}: gestor principal sem nome; associação ambígua, complete manualmente.')
-                continue
-            found = True
-            identity = _key(manager)
-            group = groups.setdefault(identity, {'name': manager, 'polos': {}})
-            group['polos'].setdefault(key, _text(row['Polo']))
-            email = _text(row['E-mail'])
-            if email:
-                manager_emails.setdefault(identity, set()).add(email.casefold())
-        if not found:
-            association_warnings.append(f'{key}: sem gestor principal identificado; carteira manual necessária.')
-    export_warning = _write_emails(data, names, contacts, operational)
+        row = directory['polos'].get(key, {})
+        polo = row.get('polo') or _text((apps.get(key) or timeline.get(key) or followup[key])[0]['Polo'])
+        manager, email = row.get('gestor', ''), row.get('email', '')
+        identity = (_flag(manager), ';'.join(sorted(email.casefold().split(';')))) if manager and email else ('', '')
+        if identity == ('', ''):
+            association_warnings.append(f'{polo}: sem nome e email completos do gestor do polo; carteira manual necessária.')
+        group = groups.setdefault(identity, {'name': manager if identity != ('', '') else '', 'polos': {}})
+        group['polos'][key] = polo
+    export_warning = _write_emails(data, names, directory, operational)
     if export_warning:
         warnings.append(export_warning)
     records['manual']['warnings'].extend(warnings + association_warnings)
     for index, (identity, group) in enumerate(sorted(groups.items()), 1):
         draft = _empty_draft()
         draft.update(gestor=group['name'], polos=sorted(group['polos'].values()))
+        draft['contatos'] = support_contacts(recipients(draft['polos'], directory))
         record_warnings, cycles, approval = list(warnings), set(), []
-        if len(manager_emails.get(identity, ())) > 1:
-            record_warnings.append('Identidade preservada pelo nome, mas há múltiplos emails; associação potencialmente ambígua, revise a carteira.')
+        if identity == ('', ''):
+            record_warnings = list(records['manual']['warnings'])
         for polo in draft['polos']:
-            key = _key(polo)
+            key = _flag(polo)
             draft['checklist'].append({'polo': polo, 'nota': None, 'status': '', 'observacao': '', 'auditor': ''})
             rows = apps.get(key, [])
             if len(rows) == 1:
@@ -241,7 +238,8 @@ def load_consolidado(root: Path) -> dict:
         draft['ciclo'] = min(cycles) if cycles else ''
         if len(cycles) > 1:
             record_warnings.append('Fontes de ciclos mistos; confirme a compatibilidade antes de usar.')
-        records[str(index)] = {'label': group['name'], 'polo_count': len(draft['polos']),
+        records['manual' if identity == ('', '') else str(index)] = {
+                               'label': group['name'] if identity != ('', '') else 'Preenchimento manual', 'polo_count': len(draft['polos']),
                                'draft': draft, 'warnings': record_warnings, 'source_cycles': sorted(cycles)}
     return records
 

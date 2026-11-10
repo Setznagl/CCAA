@@ -33,15 +33,13 @@ if (document.body.dataset.flow === 'mari') {
   const warnings = node('p'); warnings.id = 'source-warnings'; warnings.setAttribute('role', 'note');
   const editor = node('fieldset'); editor.id = 'mari-editor'; editor.disabled = true;
   editor.append(node('legend', 'Revisar agenda e completar dados ausentes'));
-  const name = input('mari-go', 'Nome do Gerente Operacional', 'text');
-  const email = input('mari-email', 'Email do Gerente Operacional (não é o email do gestor de polo)', 'email');
-  editor.append(caption('Nome do Gerente Operacional', name), name,
-    caption('Email do GO — preenchimento manual obrigatório', email), email,
+  const name = input('mari-go', 'Nome do gestor do polo', 'text');
+  editor.append(caption('Gestor do polo — preenchido pela base', name), name,
     node('p', 'Todas as datas e laboratórios vêm selecionados, sem filtro semanal automático. Desmarque as linhas fora do período desejado. Grupo econômico é informado uma vez por polo. Nenhum dado manual será salvo nas bases ou no navegador.'));
   const count = node('p'); count.id = 'mari-selection-count'; count.setAttribute('aria-live', 'polite');
   const listing = node('div'); listing.id = 'mari-rows';
-  const reviewed = input('mari-reviewed', 'Confirmo GO, email, grupos e linhas/período selecionados', 'checkbox'); reviewed.required = true;
-  editor.append(count, listing, caption('Confirmo GO, email, grupos e linhas/período selecionados', reviewed), reviewed);
+  const reviewed = input('mari-reviewed', 'Confirmo gestor, destinatários, grupos e linhas/período selecionados', 'checkbox'); reviewed.required = true;
+  editor.append(count, listing, caption('Confirmo gestor, destinatários, grupos e linhas/período selecionados', reviewed), reviewed);
   (document.querySelector('#step-editor') || form).append(warnings, editor);
   function updateSelection() {
     const selected = rows.filter(row => row.selected.checked);
@@ -50,15 +48,16 @@ if (document.body.dataset.flow === 'mari') {
     for (const [polo, group] of groups) {
       group.disabled = !selected.some(row => row.source.polo === polo); group.required = !group.disabled;
     }
+    window.CCAAContacts.sync(selected.map(row => row.source.polo));
   }
-  function populate(draft) {
-    name.value = draft.label || ''; email.value = draft.email || ''; reviewed.checked = false;
+  function populate(draft, auditores) {
+    name.value = draft.label || ''; reviewed.checked = false;
     rows = []; groups = new Map(); listing.replaceChildren();
     for (const data of draft.rows) {
       if (!groups.has(data.polo)) {
         const section = node('fieldset'); section.append(node('legend', data.polo));
         const group = input(`mari-group-${groups.size}`, `Grupo econômico — ${data.polo}`, 'text', data.grupo || '');
-        group.dataset.field = 'grupo'; section.append(caption('Grupo econômico (obrigatório)', group), group);
+        group.dataset.field = 'grupo'; section.append(caption('Grupo econômico — preenchido pela base; revise se necessário', group), group);
         groups.set(data.polo, group); listing.append(section);
       }
       // Spreadsheet text remains text, never interpolated HTML.
@@ -72,19 +71,20 @@ if (document.body.dataset.flow === 'mari') {
       listing.append(line);
       rows.push({source: data, selected, date});
     }
+    window.CCAAContacts.mount(editor, draft, auditores);
     updateSelection();
   }
   async function loadDraft() {
     ready = false; invalidate(); editor.disabled = true; $('reference-date').disabled = true; warnings.textContent = '';
     const current = version, id = record.value;
-    if (!id) { message('Selecione um GO ou a revisão manual de polos sem GO.'); return; }
+    if (!id) { message('Selecione o gestor do polo ou a revisão manual.'); return; }
     message('Carregando agenda para revisão…');
     try {
       const response = await fetch(`/api/draft/mari?${new URLSearchParams({id})}`, {cache: 'no-store'});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível carregar a agenda');
       if (current !== version) return;
-      populate(data.draft);
+      populate(data.draft, data.auditores);
       warnings.textContent = [`Origem: databases/09-11-26; semestre(s) da fonte: ${(data.source_cycles || []).join(', ') || 'não informado'}.`, ...(data.warnings || [])].join('\n');
       ready = true; editor.disabled = false; $('reference-date').disabled = false;
       window.CCAASteps?.show?.(2);
@@ -109,7 +109,8 @@ if (document.body.dataset.flow === 'mari') {
     if (!ready || !form.reportValidity()) return;
     invalidate();
     const current = version, id = record.value, date = $('reference-date').value;
-    const draft = {label: name.value, email: email.value, reviewed: reviewed.checked,
+    const draft = {label: name.value, reviewed: reviewed.checked,
+      destinatarios: window.CCAAContacts.read(rows.filter(row => row.selected.checked).map(row => row.source.polo)),
       rows: rows.map(row => ({...row.source, selected: row.selected.checked, date: row.date.value, grupo: groups.get(row.source.polo).value}))};
     generate.disabled = true; message('Gerando HTML com a agenda revisada…');
     try {
@@ -131,7 +132,7 @@ if (document.body.dataset.flow === 'mari') {
       if (current === version) generate.disabled = !ready;
     }
   });
-  $('record-label').textContent = 'Gerente Operacional / polos para revisão manual';
+  $('record-label').textContent = 'Gestor do polo / carteira de auditorias programadas';
   $('date-control').hidden = false; $('reference-date').disabled = true;
   for (const link of document.querySelectorAll('[data-nav]')) if (link.dataset.nav === 'mari') link.setAttribute('aria-current', 'page');
   window.addEventListener('pagehide', () => { ready = false; invalidate(); });
@@ -143,11 +144,11 @@ if (document.body.dataset.flow === 'mari') {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as bases');
       if (current !== version) return;
-      record.replaceChildren(new Option('Selecione um GO ou a revisão manual', ''));
+      record.replaceChildren(new Option('Selecione o gestor do polo ou a revisão manual', ''));
       for (const item of data.options) record.add(new Option(`${item.label} — ${item.polo_count} polo(s)`, item.id));
       $('reference-date').value = data.today;
       record.disabled = !data.options.length;
-      message('Selecione um GO ou os polos com GO pendente. Nenhum filtro automático de semana é aplicado.');
+      message('Selecione o gestor para revisar as auditorias de todos os seus polos. Nenhum filtro automático de semana é aplicado.');
     } catch (error) {
       if (current === version) message(error.message, true);
     }

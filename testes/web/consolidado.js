@@ -20,6 +20,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
   };
   let version = 0, ready = false, blobUrl = null;
   const rows = {}, inputs = {};
+  const contactOrigins = new WeakMap();
   function node(tag, text) {
     const element = document.createElement(tag);
     if (text !== undefined) element.textContent = text;
@@ -78,6 +79,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
   }
   function addRow(section, data) {
     const tr = node('tr'), controls = {};
+    if (section === 'contatos') contactOrigins.set(controls, data.origem ?? null);
     for (const [key, label, type] of sections[section][1]) {
       const control = input(key, label, type, data[key]);
       control.dataset.section = section; control.dataset.field = key;
@@ -88,6 +90,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
     remove.addEventListener('click', () => {
       if (section === 'polos') inputs.reprovados_sem_retorno.value = '';
       rows[section] = rows[section].filter(row => row !== controls); tr.remove(); invalidate();
+      if (section === 'polos') window.CCAAContacts.sync(rows.polos.map(row => row.polo.value.trim()).filter(Boolean));
       message('Linha removida. Revise o indicador da carteira; polos fora da carteira serão omitidos.');
     });
     const actions = node('td'); actions.append(remove); tr.append(actions);
@@ -97,9 +100,14 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
   function payload() {
     const draft = {};
     for (const [key, control] of Object.entries(inputs)) draft[key] = readValue(control);
-    for (const section of Object.keys(sections)) draft[section] = rows[section].map(controls => Object.fromEntries(Object.entries(controls).map(([key, control]) => [key, readValue(control)])));
+    for (const section of Object.keys(sections)) draft[section] = rows[section].map(controls => {
+      const row = Object.fromEntries(Object.entries(controls).map(([key, input]) => [key, readValue(input)]));
+      if (section === 'contatos') row.origem = contactOrigins.get(controls);
+      return row;
+    });
     draft.polos = draft.polos.map(row => row.polo.trim()).filter(Boolean);
     for (const section of ['checklist', 'agenda', 'praticas', 'laboratorios']) draft[section] = draft[section].filter(row => draft.polos.includes(row.polo));
+    draft.destinatarios = window.CCAAContacts.read(draft.polos);
     return draft;
   }
   async function loadDraft() {
@@ -117,6 +125,8 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
         bodies[section].replaceChildren(); rows[section] = [];
         for (const row of data.draft[section] || []) addRow(section, section === 'polos' ? {polo: row} : row);
       }
+      window.CCAAContacts.mount(editor, data.draft, data.auditores);
+      window.CCAAContacts.sync(data.draft.polos);
       warnings.textContent = [`Origem das bases: ${(data.source_cycles || []).join(', ') || 'não informada'}. Alterar o ciclo não atualiza a fonte.`, ...(data.warnings || [])].join('\n');
       ready = true; editor.disabled = false;
       window.CCAASteps?.show?.(2);
@@ -132,7 +142,10 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
       if (type === 'change') return loadDraft();
       ready = false;
     }
-    if (event.target.dataset.section === 'polos') inputs.reprovados_sem_retorno.value = '';
+    if (event.target.dataset.section === 'polos') {
+      inputs.reprovados_sem_retorno.value = '';
+      window.CCAAContacts.sync(rows.polos.map(row => row.polo.value.trim()).filter(Boolean));
+    }
     invalidate();
     message('Dados alterados. Gere novamente para atualizar a prévia e o download.');
   });

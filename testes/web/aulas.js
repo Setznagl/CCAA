@@ -2,7 +2,7 @@
 if (document.body.dataset.flow === 'aulas-praticas') {
   const flow = 'aulas-praticas', $ = id => document.querySelector(`#${id}`);
   const form = $('form'), record = $('record'), generate = $('generate'), frame = $('preview'), download = $('download');
-  let version = 0, ready = false, blobUrl = null, labs = [];
+  let version = 0, ready = false, blobUrl = null, labs = [], recipientPolos = [];
   function node(tag, text) { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; }
   function message(text, error = false) { $('status').textContent = text; $('status').setAttribute('role', error ? 'alert' : 'status'); }
   function invalidate() {
@@ -64,6 +64,9 @@ if (document.body.dataset.flow === 'aulas-praticas') {
       for (const [key, input] of Object.entries(counts)) input.value = data.draft.praticas[key] ?? '';
       applicable.checked = data.draft.praticas_aplicaveis; labStatus.value = data.draft.labs_status; reviewed.checked = false;
       labs = []; listing.replaceChildren(); for (const lab of data.draft.labs_lista) addLab(lab);
+      recipientPolos = data.draft.destinatarios.map(row => row.polo);
+      window.CCAAContacts.mount(editor, data.draft, data.auditores);
+      window.CCAAContacts.sync(recipientPolos);
       warnings.textContent = (data.warnings || []).join('\n'); ready = true; editor.disabled = false; update();
       window.CCAASteps?.show?.(2);
       message('Revise os dados e preencha os suplementos antes de confirmar e gerar.');
@@ -74,6 +77,7 @@ if (document.body.dataset.flow === 'aulas-praticas') {
     event.preventDefault(); if (!ready || !form.reportValidity()) return;
     invalidate(); const current = version, id = record.value, label = record.selectedOptions[0].textContent;
     const draft = {reviewed: reviewed.checked, praticas_aplicaveis: applicable.checked, labs_status: labStatus.value,
+      destinatarios: window.CCAAContacts.read(recipientPolos),
       praticas: Object.fromEntries(Object.entries(counts).map(([key, input]) => [key, input.value === '' ? null : Number(input.value)])),
       labs_lista: labs.map(row => Object.fromEntries(Object.entries(row).map(([key, input]) => [key, input.value]))),
       ...Object.fromEntries(Object.entries(dates).map(([key, input]) => [key, input.value]))};

@@ -36,9 +36,13 @@ A inicialização anuncia uma URL. Porta ocupada encerra a tentativa sem procura
 
 ### Agenda Semanal de Auditorias
 
-Lê timeline e contatos da pasta nova, não XLSM/Master. Mantém todas as linhas de laboratório e datas disponíveis para seleção explícita; não filtra automaticamente a semana corrente. O contador distingue polos únicos e linhas de laboratório.
+Lê timeline e as duas bases gerenciais da pasta nova, não XLSM/Master. Mantém todas as linhas de laboratório e datas disponíveis para seleção explícita; não filtra automaticamente a semana corrente. O contador distingue polos únicos e linhas de laboratório.
 
-Grupo econômico e email do GO começam vazios. GO ausente/TBD/ambíguo fica acessível na revisão manual, não desaparece. Complete os campos, selecione linhas/datas e confirme o período antes de gerar. Email de contato de polo não é reutilizado como email de GO. A data de referência afeta avisos de data passada, não substitui as datas das auditorias.
+Agrupa os polos pelo nome e email do **gestor do polo destinatário**, não pelo GO. Nome, email e grupo econômico vêm de `auditoria-base-gerencial.xlsx`. Homônimos com emails diferentes continuam separados e são identificados no seletor. Revise as linhas/datas e confirme o período antes de gerar. A data de referência afeta avisos de data passada, não substitui as datas das auditorias. No email, o rótulo do destinatário passa a ser Gestor do Polo, mantendo a arte.
+
+Nas três páginas dinâmicas, `gerencial.py` cruza o nome completo do polo (sem fuzzy match) com a gerencial e resolve emails dos papéis de cópia por nome normalizado em `auditoria-base-gerencial-contatos.xlsx`. Não infere destinatários pelo GO nem equipara papéis diferentes. Conflitos de emails no cadastro não são resolvidos escolhendo o primeiro.
+
+O painel de destinatários apresenta contatos preenchidos sem repetir a mesma pessoa em cada polo. Somente lacunas geram campos de complemento. Quando não há vínculo acadêmico, **escolha um auditor cadastrado para cada polo**; a aba `AUDITORES` da gerencial contém os nomes e emails autorizados, incluindo os novos sem vínculo. A escolha só vale para a geração atual, não altera bases nem o auditor do checklist. Negócios/infra sem dados continuam identificados como não informados e podem ser complementados; nomes e email do destinatário e escolha acadêmica são validados no servidor. Excluir um polo remove suas exigências e contatos da revisão.
 
 ### Agenda de Regularização da Auditoria Acadêmica
 
@@ -52,13 +56,14 @@ O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/mod
 
 ### Agenda de Auditoria e Situação de Regularização dos Polos
 
-- Carteira: tabela de contatos, Perfil GESTOR PRINCIPAL; somente polos presentes em timeline, apps ou acompanhamento. Mantém associações a todos os gestores, sem escolher o primeiro ou fundir pessoas distintas por um email compartilhado. Identidades potencialmente ambíguas são avisadas.
+- Carteira: gestor do polo da gerencial; somente polos presentes em timeline, apps ou acompanhamento. Agrupa por nome + conjunto de emails, sem fundir homônimos ou nomes diferentes por um email compartilhado. Polos sem associação completa continuam no preenchimento manual.
 - Práticas: apps-prazo. Agenda/pareceres: timeline. Indicador Rep. Sem Retorno: acompanhamento, somente com cobertura completa e fonte única por polo.
-- Checklist CL2026, prazos e contatos de apoio sem fonte permanecem manuais. Vereditos não são checklist. Carteira e linhas carregadas podem ser revisadas sem alterar as fontes.
+- Checklist CL2026 e prazos sem fonte permanecem manuais. Contatos de apoio são preenchidos pelas bases e pelas escolhas acadêmicas; suplementos manuais do corpo são preservados. Vereditos e acadêmicos de cópia não são checklist. Carteira e linhas carregadas podem ser revisadas sem alterar as fontes.
 - 262 e 26.2 são sinônimos. Ciclo ausente fica desconhecido; mudar o título não atualiza a origem. Rodapés EN/PT são metadados, não polos.
 - Alterar a carteira limpa o indicador agregado para revisão. Totais de práticas são recalculados sem converter ausências em zero. Avisos de polos sem associação ficam na revisão manual, não em carteiras alheias.
+- Contatos derivados conservam sua origem mesmo após editar nome/email/telefone: remover o único polo associado também remove o contato do corpo. Contatos novos adicionados manualmente continuam como suplementos independentes.
 
-Na carga do consolidado, `databases/09-11-26/emails.xlsx` é gerada com **Polo | Email | Enviar**: emails distintos de gestores principais concatenados com `;`, Enviar vazio. A escrita é atômica, protegida contra fórmulas e ignorada no Git. Uma falha de escrita vira aviso; o HTML continua usando as fontes originais. Mudança da assinatura das fontes provoca regeneração na próxima carga. O arquivo não é fonte de dados do corpo.
+Na carga do consolidado, `databases/09-11-26/emails.xlsx` é gerada com **Polo | Email | Enviar**: emails dos gestores de polo da gerencial, distintos e concatenados com `;`, Enviar vazio. A escrita é atômica, protegida contra fórmulas e ignorada no Git. Uma falha de escrita vira aviso; o HTML continua usando as fontes originais. Mudança da assinatura das fontes provoca regeneração na próxima carga. O arquivo não é fonte de dados do corpo nem configuração de envio.
 
 ## Segurança e comportamento
 
@@ -66,7 +71,7 @@ Dados são carregados e mantidos em memória; reinicie o servidor após substitu
 
 Qualquer edição/seleção invalida prévia e download, inclusive durante requisição. Respostas antigas não podem restaurar um resultado descartado. O HTML no iframe é isolado por sandbox/CSP; download e snapshot têm os mesmos bytes, sem painel de controle. Layouts de email fixos podem exigir rolagem dentro do iframe no celular; não equivalem a validação Outlook/Gmail.
 
-Controles neutros temporários e arte dos emails preservada. A referência visual posterior é LIRA; envio e regras de negócio fora desta migração continuam sem integração.
+Controles seguem o visual web do LIRA, com fontes locais. Arte dos emails preservada; envio e regras de negócio fora desta migração continuam sem integração.
 
 ## Testes
 
@@ -74,9 +79,10 @@ Da raiz:
 
 ```sh
 .venv/bin/python -m unittest discover -s testes -p 'test_*.py' -v
-node --test testes/test_app.mjs testes/test_*_app.mjs
+CCAA_PLAYWRIGHT_MODULE=/caminho/playwright/index.mjs CCAA_TEST_URL=http://127.0.0.1:8878 node testes/test_gerencial_e2e.mjs
+CCAA_PLAYWRIGHT_MODULE=/caminho/playwright/index.mjs node testes/test_contact_state.mjs
 ```
 
-Os testes unitários Node não precisam de pacotes adicionais. Testes de arte usam goldens sintéticos versionados, sem depender da prévia pessoal ausente de Mari. Fixtures não são fontes operacionais.
+O commit remoto `1.0` removeu a suíte anterior. `test_gerencial.py` cobre esta integração com bases sintéticas (agrupamento, vínculos, validação e exportação derivada), sem restaurar arquivos antigos. Fixtures não são fontes operacionais.
 
-Os E2E exigem Playwright/Chromium e aceitam `CCAA_PLAYWRIGHT_MODULE`, `AGENT_BROWSER_EXECUTABLE_PATH` e `CCAA_TEST_URL`. Evidências ficam em `testes/evidence/`, ignoradas no Git. Use um servidor de teste apenas durante a execução e encerre-o ao terminar; não deixe outra instância ocupando uma segunda porta.
+Os E2E exigem Playwright/Chromium e aceitam `CCAA_PLAYWRIGHT_MODULE`, `AGENT_BROWSER_EXECUTABLE_PATH`, `CCAA_TEST_URL` e `CCAA_EVIDENCE`. Inicie antes o servidor de teste na mesma porta. Evidências ficam fora do repositório (padrão `/opt/data/cache/scratch/ccaa-gerencial-evidence`). Use um servidor de teste apenas durante a execução e encerre-o ao terminar.

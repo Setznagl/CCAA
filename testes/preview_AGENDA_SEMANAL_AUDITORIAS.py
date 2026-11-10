@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from openpyxl import load_workbook
+from gerencial import key, load_directory, recipients
 
 
 def _records(path, required):
@@ -35,43 +36,43 @@ def _manager(value):
     return text
 
 
-def load_mari(root: Path) -> dict[str, dict]:
-    """Timeline owns the roster; contact emails belong to poles, never to GOs."""
+def load_mari(root: Path, directory=None) -> dict[str, dict]:
+    """Todas as ocorrências da timeline, agrupadas pelo gestor destinatário."""
     folder = Path(root) / 'databases/09-11-26'
-    contacts = {}
-    for _, row in _records(folder / 'auditoria-tabela-contatos.xlsx', ('Polo', 'Gerente Operacional')):
-        polo = _text(row['Polo']).strip()
-        contacts.setdefault(polo, set()).add(_manager(row['Gerente Operacional']))
+    directory = directory or load_directory(folder)
     grouped = {}
     for index, row in _records(folder / 'auditoria-timeline-262.xlsx', ('Polo', 'Laboratório', 'Data agendada', 'semestre_operacional_x')):
         polo = _text(row['Polo']).strip()
-        names = contacts.get(polo, set())
-        manager = next(iter(names)) if len(names) == 1 and '' not in names else ''
-        key = manager.casefold()
-        if key not in grouped:
-            grouped[key] = {'label': manager or 'Revisão manual — GO ausente/TBD/ambíguo',
-                            'draft': {'label': manager, 'email': '', 'reviewed': False, 'rows': []},
+        if key(polo) in ('', 'TOTAL', '-'):
+            continue
+        contact = directory['polos'].get(key(polo), {})
+        manager, email = contact.get('gestor', ''), contact.get('email', '')
+        identity = (key(manager), ';'.join(sorted(email.split(';')))) if manager else ('', '')
+        if identity not in grouped:
+            grouped[identity] = {'label': manager or 'Revisão manual — gestor do polo ausente',
+                            'draft': {'label': manager, 'reviewed': False, 'rows': []},
                             'warnings': [], 'source_cycles': [], 'polo_count': 0}
-        model = grouped[key]
+        model = grouped[identity]
         parsed = _date(row['Data agendada'])
         model['draft']['rows'].append({'id': str(index), 'polo': polo,
-            'laboratorio': _text(row['Laboratório']).strip(), 'grupo': '',
+            'laboratorio': _text(row['Laboratório']).strip(), 'grupo': contact.get('grupo', ''),
             'date': parsed.isoformat(timespec='minutes') if parsed else '', 'selected': True})
         cycle = _text(row['semestre_operacional_x']).strip()
         if cycle and cycle not in model['source_cycles']:
             model['source_cycles'].append(cycle)
         if not manager:
-            warning = f'{polo}: GO ausente, TBD ou ambíguo; informe o GO e selecione apenas sua carteira.'
+            warning = f'{polo}: gestor do polo ausente; revise destinatário e carteira.'
             if warning not in model['warnings']: model['warnings'].append(warning)
         if not parsed:
             model['warnings'].append(f'{polo}: data de agendamento ausente ou inválida; preencher ou desmarcar a linha.')
     result = {}
-    for index, key in enumerate(sorted(grouped), 1):
-        model = grouped[key]
+    for index, identity in enumerate(sorted(grouped), 1):
+        model = grouped[identity]
         model['polo_count'] = len({r['polo'] for r in model['draft']['rows']})
+        model['draft']['destinatarios'] = recipients([r['polo'] for r in model['draft']['rows']], directory)
         model['warnings'][:0] = [
             'Todas as datas/laboratórios estão selecionados; não há filtro automático de semana. Revise e desmarque as linhas fora do período desejado.',
-            'Grupo econômico por polo e email do GO não constam das novas bases: preenchimento manual obrigatório. O email dos contatos é do gestor de polo e não será reutilizado.']
+            'Gestor, grupo econômico e contatos vêm das bases gerenciais. Escolha um auditor acadêmico por polo quando não houver vínculo.']
         result[str(index)] = model
     return result
 
@@ -84,12 +85,9 @@ def review_mari(draft, record):
 
     if not isinstance(draft, dict) or draft.get('reviewed') is not True:
         raise ValueError('Confirme a revisão das linhas e do período antes de gerar')
-    label = text(draft.get('label'), 'Gerente Operacional')
+    label = text(draft.get('label'), 'Gestor do polo')
     if not _manager(label):
-        raise ValueError('Gerente Operacional: substitua o placeholder por um nome válido')
-    email = text(draft.get('email'), 'Email do GO', 254)
-    if not re.fullmatch(r'[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+', email):
-        raise ValueError('Email do GO: informe um endereço válido')
+        raise ValueError('Gestor do polo: substitua o placeholder por um nome válido')
     rows = draft.get('rows')
     source = {r['id']: r for r in record['draft']['rows']}
     if not isinstance(rows, list) or not rows or len(rows) > min(len(source), 10000):
