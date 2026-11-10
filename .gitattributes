@@ -1,4 +1,5 @@
 * text=auto
 *.csv text eol=lf
+*.cmd text eol=crlf
 # Preserve original renderer whitespace in the byte-for-byte synthetic golden.
 testes/aulas_original_synthetic_golden.html -whitespace

@@ -101,11 +101,21 @@ def make_server(root, port=8876):
             if path == '/favicon.ico':
                 self.reply(204)
                 return
+            if path == '/api/lote/modelo.xlsx':
+                from lote import spreadsheet_template
+                self.reply(200, spreadsheet_template(),
+                           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                           download='destinatarios-fast-track.xlsx')
+                return
+            if path == '/fast-track-infra-2026/lote':
+                self.reply(200, (web / 'lote.html').read_bytes(), 'text/html; charset=utf-8')
+                return
             if path in FLOW_PAGES:
                 flow, heading, folder, note = FLOW_PAGES[path]
                 static = flow == 'fast-track-infra-2026'
                 body = (web / 'page.html').read_text(encoding='utf-8')
                 for key, value in {'FLOW': flow, 'HEADING': heading, 'FOLDER': folder, 'NOTE': note,
+                                   'BATCH_BUTTON': ('<a id="batch-open" class="download" href="/fast-track-infra-2026/lote">DIsparo em lote</a>' if static else ''),
                                    'RECORD_STATE': 'hidden disabled' if static else '',
                                    'GENERATE_STATE': '' if static else 'disabled',
                                    'INITIAL_STATUS': 'Modelo estático pronto para gerar.' if static else 'Lendo as bases recebidas…',
@@ -122,7 +132,8 @@ def make_server(root, port=8876):
                 else:
                     self.reply(404)
                 return
-            if path in {'/app.js', '/app.css', '/steps.js', '/contacts.js', '/consolidado.js', '/mari.js', '/aulas.js'}:
+            if path in {'/app.js', '/app.css', '/steps.js', '/contacts.js', '/consolidado.js', '/mari.js', '/aulas.js',
+                        '/lote.js', '/lote.css'}:
                 kind = 'text/javascript' if path.endswith('.js') else 'text/css'
                 self.reply(200, (web / path[1:]).read_bytes(), kind + '; charset=utf-8')
                 return
@@ -207,6 +218,37 @@ def make_server(root, port=8876):
             if not self.local_request():
                 return
             path = urlsplit(self.path).path
+            if path in {'/api/lote/importar', '/api/lote/preview', '/api/lote/pacote'}:
+                if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
+                    self.json_reply(415, {'error': 'Envie os campos como JSON'})
+                    return
+                try:
+                    length = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < length <= 4 * 1024 * 1024:
+                        self.json_reply(413, {'error': 'Lote excede 4 MiB ou está vazio'})
+                        return
+                    payload = json.loads(self.rfile.read(length).decode('utf-8'))
+                    if not isinstance(payload, dict):
+                        raise ValueError('Formulário inválido')
+                    from lote import approved_html, build_package, import_spreadsheet
+                    if path == '/api/lote/importar':
+                        self.json_reply(200, {'rows': import_spreadsheet(payload.get('xlsx'))})
+                    elif path == '/api/lote/pacote':
+                        self.reply(200, build_package(payload), 'application/zip', download='ccaa-fast-track-lote.zip')
+                    else:
+                        html = approved_html(payload)
+                        token = uuid.uuid4().hex
+                        with lock:
+                            snapshots[token] = (html, 'ccaa-fast-track-aprovado.html')
+                            while len(snapshots) > 16:
+                                snapshots.popitem(last=False)
+                        self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY,
+                                   headers={'X-Preview-URL': '/api/preview/' + token})
+                except (ValueError, UnicodeDecodeError) as exc:
+                    self.json_reply(400, {'error': str(exc)})
+                except Exception:
+                    self.json_reply(400, {'error': 'Não foi possível preparar o lote. Confira os arquivos e tente novamente.'})
+                return
             if path not in {'/api/render/auditoria-situacao-polos', '/api/render/mari', '/api/render/aulas-praticas'}:
                 self.json_reply(405, {'error': 'Este ambiente só permite leitura e geração de HTML'})
                 return

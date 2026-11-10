@@ -54,6 +54,30 @@ Ausência de linha na timeline não comprova ausência de auditoria. Contagens a
 
 O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/modelo_email.html`. Não lê planilhas, não converte PDF em runtime e não possui campos. Preserva imagens incorporadas, texto e prazo **histórico 31/08** da referência; não inclui metadados Outlook/destinatários da impressão. O nome antigo da pasta continua aceito para o modelo estático.
 
+#### DIsparo em lote — ponte para Outlook clássico
+
+Guia do operador: [CCAA — instruções de disparo em lote](../docs/CCAA-disparo-em-lote-outlook.md).
+
+O botão abaixo do download abre `/fast-track-infra-2026/lote`, uma preparação separada da prévia de exemplo. Não lê as bases Fast Track nem altera o modelo. Nesta página:
+
+1. Carregue seu HTML **aprovado em UTF-8**; o mesmo corpo vai para todas as mensagens, sem personalização ou assinatura automática.
+2. Baixe o modelo `.xlsx`, preencha a aba `DESTINATARIOS` e importe. Colunas: **Enviar, Polo, Para, CC, CCO, Assunto**. SIM/X pré-seleciona; vazio/NAO não seleciona. Não use fórmulas.
+3. Revise cada linha e cópia na tela. Uma linha selecionada corresponde a uma mensagem, sem agrupamento por polo/gestor. Assunto vazio usa o assunto padrão. Conta remetente vazia usa a conta padrão do Outlook; conta explícita precisa estar configurada nele.
+4. Confira a prévia isolada e confirme a revisão de conteúdo, prazo e destinatários. Baixe o ZIP.
+5. No Windows com **Outlook clássico configurado**, extraia o ZIP e abra `abrir.cmd`. A ponte oferece rascunhos por padrão, teste isolado (sem CC/CCO do lote) e envio com confirmação própria. Leia `LEIA-ME.txt` antes de operar. Não há envio pelo servidor.
+
+Limites: 500 linhas, 1 MiB por HTML/planilha e 4 MiB por requisição de lote. Endereços devem ser explícitos, separados por `;`; nomes do catálogo Outlook não são resolvidos automaticamente. Mensagens duplicadas idênticas no lote são rejeitadas. Imagens locais, anexos e assinaturas não são empacotados automaticamente. Verifique a renderização por teste no Outlook.
+
+O ZIP contém dados pessoais: proteja o download. A página não grava uploads nas bases, no disco do servidor ou no localStorage; as últimas 16 prévias compartilhadas ficam em memória. O histórico da ponte é **local ao Windows**, separado das fontes e preservado entre downloads do mesmo lote. Ele reduz reenvio acidental, mas não comprova entrega nem substitui a conferência no Outlook. Mudar conteúdo, destinatários ou remetente gera outro lote. Não apague o histórico para contornar uma falha incerta. Se a política corporativa bloquear scripts, solicite liberação à TI, sem alterar a política pelo pacote.
+
+Teste da página com servidor temporário próprio:
+
+```sh
+CCAA_PLAYWRIGHT_MODULE=/caminho/playwright/index.mjs .venv/bin/python testes/run_lote_e2e.py
+```
+
+Os testes locais não certificam automação COM nem entrega em um Outlook real; essa homologação deve ser feita no Windows, primeiro em rascunhos e depois com teste isolado.
+
 ### Agenda de Auditoria e Situação de Regularização dos Polos
 
 - Carteira: gestor do polo da gerencial; somente polos presentes em timeline, apps ou acompanhamento. Agrupa por nome + conjunto de emails, sem fundir homônimos ou nomes diferentes por um email compartilhado. Polos sem associação completa continuam no preenchimento manual.
@@ -72,7 +96,7 @@ Dados são carregados e mantidos em memória; reinicie o servidor após substitu
 
 Qualquer edição/seleção invalida prévia e download, inclusive durante requisição. Respostas antigas não podem restaurar um resultado descartado. O HTML no iframe é isolado por sandbox/CSP; download e snapshot têm os mesmos bytes, sem painel de controle. Layouts de email fixos podem exigir rolagem dentro do iframe no celular; não equivalem a validação Outlook/Gmail.
 
-Controles seguem o visual web do LIRA, com fontes locais. Arte dos emails preservada; envio e regras de negócio fora desta migração continuam sem integração.
+Controles seguem o visual web do LIRA, com fontes locais. Arte dos emails preservada. A exportação de lote Fast Track não habilita serviços de email no servidor; os outros fluxos continuam sem integração de envio.
 
 ## Testes
 

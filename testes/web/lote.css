@@ -1,0 +1,9 @@
+/* Reuse LIRA controls; only the batch roster needs its own layout. */
+#batch-form h2 { margin-top: 1.6rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+#batch-rows fieldset { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; }
+.batch-check { display: flex; align-items: center; gap: .65rem; }
+.batch-check input { width: 24px; min-width: 24px; min-height: 24px; }
+.batch-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+.batch-fields input { min-width: 0; }
+#batch-form input[type=file] { max-width: 100%; }
+@media (max-width: 800px) { .batch-fields { grid-template-columns: 1fr; } }

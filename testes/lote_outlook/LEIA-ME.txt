@@ -1,0 +1,101 @@
+CCAA — LOTE LOCAL PARA OUTLOOK CLÁSSICO
+
+REQUISITOS
+Windows, Windows PowerShell 5.1 e Outlook CLÁSSICO instalado, com perfil e
+conta configurados. O Novo Outlook e o Outlook Web não oferecem este bridge.
+Não é necessário Excel. Não há serviço de envio nem instalação adicional.
+
+ANTES DE ABRIR
+1. Revise a planilha e aprove o HTML na página do CCAA antes de baixar.
+2. Extraia TODO o ZIP em uma pasta local. Não execute de dentro do ZIP.
+3. Mantenha juntos: abrir.cmd, executar.ps1, lote.json, mensagem.html e este
+   LEIA-ME.txt. Não altere nem substitua arquivos enquanto o lote estiver aberto.
+4. Abra o Outlook clássico e confira o perfil. Feche os rascunhos deste lote
+   antes de usar o bridge; não os mova entre pastas/caixas.
+5. Execute abrir.cmd. Confira a conta mostrada na janela antes de confirmar.
+
+MODOS
+R ou Enter: RASCUNHOS (padrão). Após digitar SIM, cria um rascunho por linha
+aprovada. Não chama Send. Pode revisar no Outlook sem enviar. Reabrir o lote
+não duplica os rascunhos já registrados.
+
+E: ENVIO REAL. Mostra a conta e a quantidade PENDENTE. Só prossegue se você
+  digitar exatamente ENVIAR N, com N igual ao número mostrado. Exemplo:
+  ENVIAR 12
+Linhas já submetidas são ignoradas. Há pausa mínima de dois segundos por
+envio. Se há rascunho registrado, o bridge usa EXATAMENTE seu EntryID e StoreID,
+não cria outro. Reaplica o HTML, assunto, Para, CC e CCO aprovados no pacote;
+remove anexos, destinos de resposta e delegação adicionados no Outlook.
+Alterações feitas no rascunho NÃO são incorporadas ao pacote: para alterar o
+conteúdo ou os destinos, volte à página, revise e gere um pacote novo.
+NÃO envie manualmente rascunhos deste lote e depois tente enviá-los pelo bridge.
+
+T: TESTE REAL ISOLADO. Pede UM endereço simples, mostra remetente e destino e
+exige ENVIAR 1. Usa o HTML aprovado e assunto prefixado com [TESTE], sem CC/CCO.
+Nenhum destinatário da planilha é usado. O teste tem estado próprio: não marca
+as linhas reais como enviadas. O mesmo lote não repete o teste ao mesmo e-mail;
+outro endereço de teste exige nova confirmação. O teste também é envio REAL.
+
+USO OPCIONAL PELO TERMINAL, NA PASTA EXTRAÍDA
+powershell.exe -NoProfile -File .\executar.ps1 -Modo Rascunhos
+powershell.exe -NoProfile -File .\executar.ps1 -Modo Enviar
+powershell.exe -NoProfile -File .\executar.ps1 -Modo Teste -EmailTeste voce@empresa.com.br
+Os parâmetros NÃO dispensam as confirmações locais. EmailTeste só é aceito
+no modo Teste. Não há parâmetro de confirmação automática.
+
+REMETENTE
+Se lote.json informa remetente, ele precisa corresponder a uma conta existente
+em Session.Accounts. Não há envio como caixa/endereço arbitrário. Para caixa
+compartilhada, confirme com TI se ela existe como conta no perfil.
+Se remetente está vazio, usa a primeira conta da sessão do Outlook como padrão
+e EXIBE seu endereço para confirmação. Confira-o; não presuma que corresponde
+à conta de uma janela de composição que já estava aberta. O estado fixa essa
+conta e bloqueia mudança em uma retomada. A atribuição é por SendUsingAccount;
+não há preenchimento de propriedades MAPI para contornar permissões.
+
+ESTADO, INTERRUPÇÕES E DUPLICIDADE
+O registro fica FORA do ZIP, no perfil deste usuário do Windows:
+%LOCALAPPDATA%\CCAA\Lotes\<batch_id>\estado.json
+O bloqueio execucao.lock é mantido aberto durante toda a execução. O arquivo
+pode permanecer na pasta após o término; a presença dele não significa execução.
+O estado é gravado atomicamente, com intenção durável ANTES de Save/Send.
+Draft = rascunho salvo, com EntryID e StoreID.
+Submitted = o Outlook aceitou a chamada Send; NÃO comprova entrega.
+InProgressSave, InProgressSend ou Uncertain = bloqueio para conferência manual.
+JSON de estado corrompido ou lote diferente também bloqueia; não é reiniciado.
+
+Se houver erro, travamento ou queda de energia, NÃO tente contornar o bloqueio,
+apagar estado nem trocar batch_id. Confira Rascunhos, Caixa de Saída e Itens
+Enviados; peça apoio de TI para conciliar o resultado antes de qualquer envio.
+Não há retentativa cega, exclusão automática de mensagens ou sincronização
+global. O bridge não fecha seu Outlook, não o desconecta e não força a fila.
+Mensagens podem continuar na Caixa de Saída se Outlook estiver offline.
+
+Baixar novamente o MESMO lote determinístico mantém o bloqueio neste usuário
+e computador. Outro lote, outro usuário, outra máquina ou apagar/mover o estado
+NÃO oferece a mesma proteção. Revise também a sobreposição entre lotes novos.
+O hash detecta HTML alterado, mas NÃO é uma assinatura/autenticação do pacote.
+Abra somente pacotes de origem confiável. O estado não contém senhas ou tokens;
+os arquivos do pacote contêm destinatários/conteúdo e devem ser protegidos.
+
+HTML E ANEXOS
+O corpo é somente mensagem.html em UTF-8. Não importa Excel, executa macro,
+carrega script do HTML nem incorpora arquivos locais. Não há anexos adicionais.
+Imagens locais, caminhos de rede, CSS/arquivos externos não são empacotados;
+confira se o HTML aprovado é autossuficiente. Recursos remotos podem ser
+bloqueados pelo Outlook. HTML não é renderizado pelo PowerShell; o Outlook
+continua sujeito à sua própria política de conteúdo e segurança.
+
+POLÍTICAS CORPORATIVAS
+O lançador NÃO usa ExecutionPolicy Bypass nem muda políticas. Se o Windows ou
+a empresa bloquearem o script/arquivo baixado, interrompa e procure TI para
+verificação/assinatura/liberação conforme a política local. Não desative
+proteções. Avisos de segurança do Outlook continuam sob controle do usuário.
+
+VERIFICAÇÃO TÉCNICA
+Testes de lógica, persistência, bloqueio e COM simulado estão em tests.ps1:
+powershell.exe -NoProfile -File .\tests.ps1
+Checagem portátil adicional: python -m unittest discover -s . -p test_bridge.py
+Os testes não conectam ao Outlook nem enviam e-mails. O pacote de usuário pode
+não incluir os testes. Execução real com Outlook/COM e políticas corporativas
+precisa ser homologada no Windows antes de uso operacional.

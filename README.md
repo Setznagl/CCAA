@@ -1,6 +1,8 @@
 # CCAA
 
-Projeto do agrupador Cogna Automations. Bancada local para gerar, inspecionar e baixar HTML, **sem envio de email**.
+Projeto do agrupador Cogna Automations. Bancada local para gerar, inspecionar e baixar HTML, **sem envio de email pelo servidor**. Fast Track também exporta um lote revisado para execução separada no Windows/Outlook clássico.
+
+**Instruções de uso do disparo em lote:** [guia para Outlook clássico](docs/CCAA-disparo-em-lote-outlook.md).
 
 ## Previews por fluxo
 
@@ -50,13 +52,13 @@ O consolidado gera `databases/09-11-26/emails.xlsx` intermediária: **Polo | Ema
 - **Agenda Semanal:** revise polos, laboratórios e datas; complete grupo econômico, email do GO e GO ausente/TBD/ambíguo. Confirme o período selecionado. Não há filtro automático de semana nem escolha arbitrária da primeira data.
 - **Regularização Acadêmica:** revise práticas/laboratórios e informe os suplementos do formulário. As bases novas não fornecem os prazos gerais; os prazos históricos do modelo não devem ser reapresentados como vigentes.
 - **Consolidado:** selecione gestor ou preenchimento manual, revise carteira, complete checklist, prazos e contatos. Um polo pode pertencer a mais de um gestor; não se escolhe silenciosamente o primeiro. Polos sem associação são sinalizados na revisão manual.
-- **Fast Track:** estático, sem campos nem leitura de planilhas. Preserva o prazo **histórico 31/08** do PDF; não é um prazo atualizado.
+- **Fast Track:** prévia estática, sem campos nem leitura de planilhas. Preserva o prazo **histórico 31/08** do PDF; não é um prazo atualizado. O botão **DIsparo em lote** abre uma página separada para carregar HTML aprovado e planilha de destinatários, revisar e baixar o pacote para Outlook clássico. Detalhes e limites em `testes/README.md`.
 
 Alterar dados invalida a prévia/download anterior. Suplementos são enviados por POST, não pela URL, e não são persistidos nas planilhas ou no navegador. Salve o HTML desejado antes de sair.
 
 ## Segurança e limites
 
-- Sem macros, Outlook, SMTP, rascunhos ou atualização SharePoint. `fluxos/MAIL/` é independente e fica fora desta bancada.
+- O servidor não executa macros, Outlook, SMTP, rascunhos ou atualização SharePoint. O pacote Fast Track usa uma ponte local separada para Outlook clássico, com rascunhos por padrão e envio confirmado pelo operador. `fluxos/MAIL/` permanece independente e intacto.
 - Prévia isolada por sandbox/CSP; sem scripts, formulários ou recursos externos no email. O download contém os mesmos bytes do HTML gerado, sem o painel.
 - Ausência não vira zero, Não realizado ou ausência de auditoria. Lacunas continuam explícitas para revisão.
 - Controles neutros temporários; arte dos emails preservada. A referência visual futura continua sendo LIRA.
