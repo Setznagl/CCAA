@@ -61,7 +61,7 @@ class NewPreviewServerTests(unittest.TestCase):
         return SimpleNamespace(load_consolidado=lambda root: {'gestor': record}, render_consolidado=render)
 
     def test_draft_and_post_return_an_isolated_exact_snapshot(self):
-        with patch.dict('sys.modules', {'preview_consolidado': self.backend()}):
+        with patch.dict('sys.modules', {'preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS': self.backend()}):
             status, _, raw = self.request('/api/options/auditoria-situacao-polos')
             self.assertEqual(status, 200, raw.decode())
             self.assertEqual(json.loads(raw)['options'][0]['id'], 'gestor')
@@ -93,7 +93,7 @@ class NewPreviewServerTests(unittest.TestCase):
         records['gestor']['warnings'] = ['Polo de teste: práticas ausentes', 'Fonte real 261']
         backend.load_consolidado = lambda root: records
         backend.render_consolidado = Mock(return_value='<html><body>Prévia</body></html>')
-        with patch.dict('sys.modules', {'preview_consolidado': backend}):
+        with patch.dict('sys.modules', {'preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS': backend}):
             status, _, _ = self.request('/api/render/auditoria-situacao-polos',
                                        {'id': 'gestor', 'draft': {'gestor': 'Manual', 'polos': ['Polo mantido']}})
         self.assertEqual(status, 200)
@@ -112,7 +112,7 @@ class NewPreviewServerTests(unittest.TestCase):
             ({'id': 5, 'draft': {}}, None, 400),
             ({'id': 'desconhecido', 'draft': {}}, None, 404),
         ]
-        with patch.dict('sys.modules', {'preview_consolidado': self.backend()}):
+        with patch.dict('sys.modules', {'preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS': self.backend()}):
             for payload, headers, expected in cases:
                 with self.subTest(payload=payload, expected=expected):
                     status, _, _ = self.request(route, payload, headers)
@@ -124,7 +124,7 @@ class NewPreviewServerTests(unittest.TestCase):
             error.exception.close()
 
     def test_snapshots_are_bounded_and_render_does_not_mutate_loaded_data(self):
-        with patch.dict('sys.modules', {'preview_consolidado': self.backend()}):
+        with patch.dict('sys.modules', {'preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS': self.backend()}):
             urls = []
             for number in range(17):
                 status, headers, _ = self.request('/api/render/auditoria-situacao-polos',

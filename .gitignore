@@ -14,3 +14,7 @@ __pycache__/
 *.pem
 *.key
 .DS_Store
+
+# Intermediária local de contatos (derivada das bases)
+/databases/09-11-26/emails.xlsx
+/databases/09-11-26/.emails-*.xlsx

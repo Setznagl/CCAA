@@ -1,5 +1,5 @@
 'use strict';
-if (document.body.dataset.flow !== 'auditoria-situacao-polos') {
+if (!['auditoria-situacao-polos', 'mari', 'aulas-praticas'].includes(document.body.dataset.flow)) {
 const flow = document.body.dataset.flow;
 const staticPreview = flow === 'fast-track-infra-2026';
 const form = document.querySelector('#form');

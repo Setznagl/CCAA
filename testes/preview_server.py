@@ -11,9 +11,9 @@ import uuid
 
 FLOW_PAGES = {
     '/mari': ('mari', 'Agenda Semanal de Auditorias', 'AGENDA_SEMANAL_AUDITORIAS',
-              'Reprodução isolada do HTML de Mari; não executa VBA ou Excel.'),
+              'Agenda e contatos de databases/09-11-26. Revise todas as datas/laboratórios e complete GO, email e grupo econômico antes de gerar. Não há filtro automático de semana; não executa VBA ou Excel.'),
     '/aulas-praticas': ('aulas-praticas', 'Agenda de Regularização da Auditoria Acadêmica', 'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA',
-                      'Reutiliza as funções de dados e HTML do Python atual. Este teste do corpo não lê destinatários nem carrega funções de envio.'),
+                      'Lê aulas previstas e comprovadas apenas de databases/09-11-26 e mantém o layout do email. Este teste não lê destinatários nem carrega funções de envio.'),
     '/fast-track-infra-2026': ('fast-track-infra-2026', 'Agenda Fast Track Infra 2026', 'AGENDA_FAST_TRACK_INFRA_2026',
                              'Modelo fixo baseado no exemplo_email.pdf. Sem campos ou leitura das planilhas. Prazo 31/08 preservado do exemplo de 2026; não é um prazo atualizado.'),
     '/auditoria-situacao-polos': ('auditoria-situacao-polos', 'Agenda de Auditoria e Situação de Regularização dos Polos',
@@ -41,15 +41,13 @@ def make_server(root, port=8876):
         with lock:
             if flow not in cache:
                 if flow == 'mari':
-                    from preview_mari import load_mari
-                    cache[flow] = load_mari(root / 'fluxos/AGENDA_SEMANAL_AUDITORIAS')
+                    from preview_AGENDA_SEMANAL_AUDITORIAS import load_mari
+                    cache[flow] = load_mari(root)
                 elif flow == 'aulas-praticas':
-                    from preview_aulas import load_aulas
-                    source = source_file(root, 'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA',
-                                         'REGULARIZACAO_AUDITORIA_ACADEMICA', 'disparar_emails.py')
-                    cache[flow] = load_aulas(source.parent)
+                    from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import load_aulas
+                    cache[flow] = load_aulas(root / 'databases/09-11-26')
                 elif flow == 'auditoria-situacao-polos':
-                    from preview_consolidado import load_consolidado
+                    from preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS import load_consolidado
                     cache[flow] = load_consolidado(root)
                 else:
                     raise ValueError('Frente desconhecida')
@@ -108,11 +106,13 @@ def make_server(root, port=8876):
                                    'RECORD_STATE': 'hidden disabled' if static else '',
                                    'GENERATE_STATE': '' if static else 'disabled',
                                    'INITIAL_STATUS': 'Modelo estático pronto para gerar.' if static else 'Lendo as bases recebidas…',
-                                   'EXTRA_SCRIPT': '<script src="/consolidado.js" defer></script>' if flow == 'auditoria-situacao-polos' else ''}.items():
+                                   'EXTRA_SCRIPT': ('<script src="/consolidado.js" defer></script>' if flow == 'auditoria-situacao-polos'
+                                                    else '<script src="/mari.js" defer></script>' if flow == 'mari'
+                                                    else '<script src="/aulas.js" defer></script>' if flow == 'aulas-praticas' else '')}.items():
                     body = body.replace('__' + key + '__', value)
                 self.reply(200, body, 'text/html; charset=utf-8')
                 return
-            if path in {'/app.js', '/app.css', '/consolidado.js'}:
+            if path in {'/app.js', '/app.css', '/consolidado.js', '/mari.js', '/aulas.js'}:
                 kind = 'text/javascript' if path.endswith('.js') else 'text/css'
                 self.reply(200, (web / path[1:]).read_bytes(), kind + '; charset=utf-8')
                 return
@@ -141,8 +141,8 @@ def make_server(root, port=8876):
                         self.json_reply(404, {'error': 'Este modelo estático não usa seleção de registros'})
                         return
                     args = parse_qs(target.query, max_num_fields=4)
-                    html = source_file(root, 'AGENDA_FAST_TRACK_INFRA_2026',
-                                       'FAST_TRACK_INFRA_2026', 'modelo_email.html').read_text(encoding='utf-8')
+                    from preview_AGENDA_FAST_TRACK_INFRA_2026 import render_fast_track
+                    html = render_fast_track(root)
                     filename = 'ccaa-fast-track-infra-2026.html' if args.get('download') == ['1'] else None
                     self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY, filename)
                     return
@@ -159,24 +159,21 @@ def make_server(root, port=8876):
                     self.json_reply(404, {'error': 'Selecione um registro disponível nas bases'})
                     return
                 if action == 'draft':
-                    if flow != 'auditoria-situacao-polos':
+                    if flow == 'aulas-praticas':
+                        from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import draft_aulas
+                        self.json_reply(200, {'draft': draft_aulas(records[identity]),
+                                             'warnings': ['Sem linhas na timeline não comprova ausência de auditoria. As fontes não certificam prazos vigentes.']})
+                        return
+                    if flow not in {'auditoria-situacao-polos', 'mari'}:
                         self.json_reply(404, {'error': 'Esta frente não possui formulário complementar'})
                         return
                     record = records[identity]
                     self.json_reply(200, {key: record[key] for key in ('draft', 'warnings', 'source_cycles')})
                     return
-                if flow == 'auditoria-situacao-polos':
+                if flow in {'auditoria-situacao-polos', 'mari', 'aulas-praticas'}:
                     self.json_reply(405, {'error': 'Use o formulário para gerar esta prévia com POST'})
                     return
-                today = date.fromisoformat(args.get('date', [date.today().isoformat()])[0])
-                if flow == 'mari':
-                    from preview_mari import render_mari
-                    html = render_mari(records[identity], today)
-                else:
-                    from preview_aulas import render_aulas
-                    html = render_aulas(records[identity])
-                filename = f'ccaa-{flow}-{today.isoformat()}.html' if args.get('download') == ['1'] else None
-                self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY, filename)
+
             except ValueError as exc:
                 self.json_reply(400, {'error': str(exc)})
             except Exception as exc:
@@ -185,7 +182,8 @@ def make_server(root, port=8876):
         def do_POST(self):
             if not self.local_request():
                 return
-            if urlsplit(self.path).path != '/api/render/auditoria-situacao-polos':
+            path = urlsplit(self.path).path
+            if path not in {'/api/render/auditoria-situacao-polos', '/api/render/mari', '/api/render/aulas-praticas'}:
                 self.json_reply(405, {'error': 'Este ambiente só permite leitura e geração de HTML'})
                 return
             if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
@@ -201,25 +199,37 @@ def make_server(root, port=8876):
                 payload = json.loads(self.rfile.read(length).decode('utf-8'))
                 if not isinstance(payload, dict) or not isinstance(payload.get('id'), str) or not isinstance(payload.get('draft'), dict):
                     raise ValueError('Selecione um gestor e preencha um formulário válido')
-                records = models('auditoria-situacao-polos')
+                flow = path.rsplit('/', 1)[1]
+                records = models(flow)
                 identity = payload['id']
                 if len(identity) > 100 or identity not in records:
                     self.json_reply(404, {'error': 'Selecione um gestor disponível ou o preenchimento manual'})
                     return
                 record = records[identity]
-                selected = payload['draft'].get('polos', [])
-                if not isinstance(selected, list) or any(not isinstance(polo, str) for polo in selected):
-                    raise ValueError('polos: informe uma lista de nomes de polos')
-                removed = set(record['draft']['polos']) - set(selected)
-                warnings = [warning for warning in record['warnings']
-                            if not any(warning.startswith(polo + ':') for polo in removed)]
-                from preview_consolidado import render_consolidado
-                sample = source_file(root, 'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
-                                     'SITUACAO_REGULARIZACAO_DOS_POLOS', 'sample.html')
-                html = render_consolidado(payload['draft'], sample,
-                                          source_cycles=record['source_cycles'], warnings=warnings)
+                if flow == 'aulas-praticas':
+                    from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import review_aulas, render_aulas
+                    html = render_aulas(review_aulas(payload['draft'], record))
+                elif flow == 'mari':
+                    from preview_AGENDA_SEMANAL_AUDITORIAS import review_mari, render_mari
+                    reference = payload.get('date')
+                    if not isinstance(reference, str) or len(reference) != 10:
+                        raise ValueError('Informe a data de referência dos avisos')
+                    today = date.fromisoformat(reference)
+                    html = render_mari(review_mari(payload['draft'], record), today)
+                else:
+                    selected = payload['draft'].get('polos', [])
+                    if not isinstance(selected, list) or any(not isinstance(polo, str) for polo in selected):
+                        raise ValueError('polos: informe uma lista de nomes de polos')
+                    removed = set(record['draft']['polos']) - set(selected)
+                    warnings = [warning for warning in record['warnings']
+                                if not any(warning.startswith(polo + ':') for polo in removed)]
+                    from preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS import render_consolidado
+                    sample = source_file(root, 'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
+                                         'SITUACAO_REGULARIZACAO_DOS_POLOS', 'sample.html')
+                    html = render_consolidado(payload['draft'], sample,
+                                              source_cycles=record['source_cycles'], warnings=warnings)
                 token = uuid.uuid4().hex
-                filename = 'ccaa-auditoria-situacao-polos.html'
+                filename = f'ccaa-{flow}.html'
                 with lock:
                     snapshots[token] = (html, filename)
                     while len(snapshots) > 16:
@@ -241,9 +251,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8876)
     args = parser.parse_args()
-    server = make_server(Path(__file__).resolve().parents[1], args.port)
-    print(f'CCAA: http://127.0.0.1:{server.server_port}/mari', flush=True)
-    print(f'CCAA: http://127.0.0.1:{server.server_port}/aulas-praticas', flush=True)
+    try:
+        server = make_server(Path(__file__).resolve().parents[1], args.port)
+    except OSError as exc:
+        raise SystemExit(
+            f'A porta {args.port} já está em uso (provavelmente um servidor anterior ainda ativo).\n'
+            f'Encerre o processo antigo antes de subir outro; uma única porta atende todos os templates.\n'
+            f'Detalhe: {exc}')
+    print(f'CCAA: http://127.0.0.1:{server.server_port}/', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

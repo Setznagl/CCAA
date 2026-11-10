@@ -47,7 +47,7 @@ class PreviewServerTests(unittest.TestCase):
 
     def test_aulas_api_and_download_match_original_renderer(self):
         import preview_server
-        from preview_aulas import load_aulas, render_aulas
+        from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import load_aulas, render_aulas
         server = preview_server.make_server(ROOT, port=0)
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
@@ -58,13 +58,28 @@ class PreviewServerTests(unittest.TestCase):
                 data = json.load(response)
             self.assertTrue(any(x['id'] == '11815820' for x in data['options']))
             self.assertTrue(all(set(x) == {'id', 'label', 'polo_count'} for x in data['options']))
+            from preview_AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA import draft_aulas, review_aulas
             route = '/api/render/aulas-praticas?id=11815820&date=2026-09-11'
-            with urlopen(base + route, timeout=30) as response:
+            with self.assertRaises(HTTPError) as refused:
+                urlopen(base + route, timeout=30)
+            self.assertEqual(refused.exception.code, 405)
+            refused.exception.close()
+            model = load_aulas(ROOT / 'databases/09-11-26')['11815820']
+            draft = draft_aulas(model)
+            draft.update(prazo_praticas='2026-12-15', prazo_auditoria='2026-12-16', reviewed=True)
+            if not draft['labs_lista']:
+                draft['labs_status'] = 'nao_aplicavel'
+            for lab in draft['labs_lista']:
+                lab['nome'] = lab['nome'] or 'Laboratório de teste'
+                lab['parecer'] = lab['parecer'] or 'Parecer de teste'
+            request = Request(base + '/api/render/aulas-praticas', data=json.dumps({'id': '11815820', 'draft': draft}).encode(), headers={'Content-Type': 'application/json'})
+            with urlopen(request, timeout=30) as response:
                 html = response.read()
+                snapshot = response.headers['X-Preview-URL']
                 self.assertIn('sandbox', response.headers['Content-Security-Policy'])
-            expected = render_aulas(load_aulas(ROOT / 'fluxos/AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA')['11815820']).encode()
+            expected = render_aulas(review_aulas(draft, model)).encode()
             self.assertEqual(html, expected)
-            with urlopen(base + route + '&download=1', timeout=30) as response:
+            with urlopen(base + snapshot + '?download=1', timeout=30) as response:
                 self.assertEqual(response.read(), html)
                 self.assertIn('attachment;', response.headers['Content-Disposition'])
         finally:

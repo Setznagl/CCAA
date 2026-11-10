@@ -4,6 +4,10 @@ from html import escape
 from pathlib import Path
 from string import Template
 import math
+import json
+import os
+import tempfile
+from openpyxl import Workbook, load_workbook
 import re
 from urllib.parse import quote, unquote, urlsplit
 from zipfile import BadZipFile
@@ -11,9 +15,57 @@ import unicodedata
 
 import pandas as pd
 
-MASTER_COLUMNS = ['NOME UNIDADE SISTEMA', 'GESTOR DE POLO / DIRETOR UNIDADE',
-                  'CANAL', 'STATUS DA UNIDADE/POLO']
-SEQUENCES = ('sequenciaa1.xlsx', 'sequenciaa2.xlsx', 'sequencia3.xlsx', 'sequencia4.xlsx')
+def _write_emails(data, names, contacts, operational):
+    """Exportação derivada; nunca fornece dados ao HTML."""
+    temporary = None
+    try:
+        signature = json.dumps([(name, (data / name).stat().st_mtime_ns,
+                                 (data / name).stat().st_size) if (data / name).is_file()
+                                else (name, None, None) for name in names])
+        output = data / 'emails.xlsx'
+        if output.is_file():
+            try:
+                previous = load_workbook(output, read_only=True)
+                unchanged = previous.properties.description == signature
+                previous.close()
+                if unchanged:
+                    return
+            except (OSError, ValueError, BadZipFile):
+                pass
+        if not data.is_dir():
+            return
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Emails'
+        ws.append(['Polo', 'Email', 'Enviar'])
+        for key in sorted(operational):
+            rows = [r for r in contacts.get(key, []) if _flag(r['Perfil']) == 'GESTOR PRINCIPAL']
+            emails = {}
+            for row in rows:
+                for email in _text(row['E-mail']).split(';'):
+                    email = email.strip()
+                    if email:
+                        emails.setdefault(email.casefold(), email)
+            polo = _text(rows[0]['Polo']) if rows else key
+            values = [polo, ';'.join(emails[k] for k in sorted(emails)), '']
+            # Excel interprets these prefixes even when the source is plain text.
+            ws.append(["'" + v if v.lstrip().startswith(('=', '+', '-', '@')) else v for v in values])
+        wb.properties.description = signature
+        with tempfile.NamedTemporaryFile(prefix='.emails-', suffix='.xlsx', dir=data, delete=False) as handle:
+            temporary = Path(handle.name)
+        try:
+            wb.save(temporary)
+        finally:
+            wb.close()
+        os.replace(temporary, output)
+    except (OSError, ValueError, TypeError, BadZipFile):
+        return 'Não foi possível gravar emails.xlsx; a prévia continua usando as fontes originais.'
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass  # Uma falha de limpeza não pode impedir a prévia manual.
 
 
 def _text(value):
@@ -66,117 +118,131 @@ def load_consolidado(root: Path) -> dict:
     records = {'manual': {'label': 'Preenchimento manual', 'polo_count': 0,
                           'draft': _empty_draft(), 'source_cycles': [],
                           'warnings': ['Prévia manual: dados não conferidos com bases operacionais.']}}
-    folders = [Path(root) / 'fluxos' / name for name in (
-        'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA', 'REGULARIZACAO_AUDITORIA_ACADEMICA')]
-    data = next((p for p in folders if p.is_dir()), folders[0])
-    warnings = ['Checklist sem base preenchida; informe nota, status, observação e auditor manualmente.',
-                'Prazos e responsáveis sem fonte ficam em branco; confirme antes de usar.']
-    master_path = data / 'Base de Polos - Master (1).xlsb'
-    try:
-        if not master_path.is_file():
-            raise FileNotFoundError(master_path)
-        master = pd.read_excel(master_path, sheet_name='BASE_DE_UNIDADES',
-                               engine='pyxlsb', usecols=MASTER_COLUMNS)
-    except (OSError, ValueError, KeyError, TypeError, OverflowError, BadZipFile, ImportError):
-        records['manual']['warnings'].append('Master ausente ou inválida; preencha a carteira manualmente.')
-        return records
-
-    sources = {}
-    export_cycles = {}
-    required = {
-        **{name: ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'] for name in SEQUENCES},
-        'labs.xlsx': ['Polo', 'semestre_operacional_x', 'Laboratório', 'Tipo auditoria',
-                      'Auditor', 'Agendada', 'Data agendada', 'Realizada', 'Data realização',
-                      'Finalizada', 'Parecer Auditoria'],
-        'aprovacao.xlsx': ['Polo', 'Rep. Sem Retorno'],
-    }
-    for name, columns in required.items():
+    data = Path(root) / 'databases/09-11-26'
+    warnings = ['Checklist CL2026 sem base preenchida; informe nota, status, observação e auditor manualmente. Vereditos não equivalem ao checklist.',
+                'Prazos e contatos de apoio sem fonte ficam manuais; confirme antes de usar.']
+    names = ('auditoria-tabela-contatos.xlsx', 'auditoria-apps-prazo.xlsx',
+             'auditoria-timeline-262.xlsx', 'auditoria-polos-acompanhamento-262.xlsx')
+    columns = (
+        ['Polo', 'Nome', 'E-mail', 'Perfil'],
+        ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'],
+        ['Polo', 'semestre_operacional_x', 'Laboratório', 'Tipo auditoria', 'Auditor',
+         'Agendada', 'Data agendada', 'Realizada', 'Data realização', 'Finalizada', 'Parecer Auditoria'],
+        ['Polo', 'Rep. Sem Retorno'])
+    sources, export_cycles = {}, {}
+    for name, required in zip(names, columns):
+        grouped, cycles = {}, set()
         try:
-            frame = pd.read_excel(data / name, sheet_name='Export', usecols=columns)
-            grouped = {}
-            rows = frame.to_dict('records')
-            export_cycles[name] = {_cycle(c) for row in rows
-                                   if _text(row['Polo']).startswith('Filtros aplicados:')
-                                   for c in re.findall(r'semestre_operacional(?:_x)?\s+(?:é|=)\s*(\d{2}\.?[12])\b', _text(row['Polo']))}
-            if not export_cycles[name] and name != 'labs.xlsx':
-                warnings.append(f'{name}: ciclo não declarado; confirme o semestre manualmente antes de usar os dados.')
-            for row in rows:
-                if not _text(row['Polo']) or _text(row['Polo']).startswith('Filtros aplicados:'):
+            frame = pd.read_excel(data / name, sheet_name='Export', usecols=required)
+            for row in frame.to_dict('records'):
+                polo = _text(row['Polo'])
+                if not polo:
                     continue
-                if name in SEQUENCES or name == 'aprovacao.xlsx':
-                    for column in columns[1:]:
-                        if _number(row[column], f'{name}: {column}', integer=True) is None:
-                            raise ValueError('Contagem ausente na fonte')
-                if name == 'labs.xlsx':
-                    row['semestre_operacional_x'] = _cycle(row['semestre_operacional_x'])
-                    for column in ('Data agendada', 'Data realização'):
-                        row[column] = _source_date(row[column])
-                grouped.setdefault(_key(row['Polo']), []).append(row)
+                if polo.startswith(('Applied filters:', 'Filtros aplicados:')):
+                    cycles.update(_cycle(c) for c in re.findall(
+                        r'semestre_operacional(?:_x)?\s+(?:is|é|=)\s*(\d{2}\.?[12])\b', polo))
+                    continue
+                grouped.setdefault(_key(polo), []).append(row)
             sources[name] = grouped
         except (OSError, ValueError, KeyError, TypeError, OverflowError, BadZipFile, ImportError):
+            sources[name] = {}
             warnings.append(f'Fonte {name} ausente ou inválida; complete a seção manualmente.')
-            sources[name] = None
-
-    groups = {}
-    for row in master.to_dict('records'):
-        if (_flag(row['CANAL']) != 'PARCEIRO' or
-                _flag(row['STATUS DA UNIDADE/POLO']) != 'UNIDADE EM OPERACAO/CAPTACAO'):
-            continue
-        manager, polo = _text(row[MASTER_COLUMNS[1]]), _text(row[MASTER_COLUMNS[0]])
-        if manager and polo:
-            groups.setdefault(manager, {}).setdefault(_key(polo), polo)
-    for index, (manager, polos) in enumerate(sorted(groups.items()), 1):
-        polos = list(polos.values())
+        export_cycles[name] = cycles
+    contacts, apps, timeline, followup = (sources[n] for n in names)
+    operational = set(apps) | set(timeline) | set(followup)
+    groups, manager_emails = {}, {}
+    association_warnings = []
+    for key in sorted(operational):
+        found = False
+        for row in contacts.get(key, []):
+            if _flag(row['Perfil']) != 'GESTOR PRINCIPAL':
+                continue
+            manager = _text(row['Nome'])
+            if not manager:
+                association_warnings.append(f'{_text(row["Polo"])}: gestor principal sem nome; associação ambígua, complete manualmente.')
+                continue
+            found = True
+            identity = _key(manager)
+            group = groups.setdefault(identity, {'name': manager, 'polos': {}})
+            group['polos'].setdefault(key, _text(row['Polo']))
+            email = _text(row['E-mail'])
+            if email:
+                manager_emails.setdefault(identity, set()).add(email.casefold())
+        if not found:
+            association_warnings.append(f'{key}: sem gestor principal identificado; carteira manual necessária.')
+    export_warning = _write_emails(data, names, contacts, operational)
+    if export_warning:
+        warnings.append(export_warning)
+    records['manual']['warnings'].extend(warnings + association_warnings)
+    for index, (identity, group) in enumerate(sorted(groups.items()), 1):
         draft = _empty_draft()
-        draft.update(gestor=manager, polos=sorted(polos))
-        record_warnings = list(warnings)
-        cycles = set()
+        draft.update(gestor=group['name'], polos=sorted(group['polos'].values()))
+        record_warnings, cycles, approval = list(warnings), set(), []
+        if len(manager_emails.get(identity, ())) > 1:
+            record_warnings.append('Identidade preservada pelo nome, mas há múltiplos emails; associação potencialmente ambígua, revise a carteira.')
         for polo in draft['polos']:
             key = _key(polo)
             draft['checklist'].append({'polo': polo, 'nota': None, 'status': '', 'observacao': '', 'auditor': ''})
-            sums = [0, 0, 0]
-            found = False
-            for name in SEQUENCES:
-                for row in (sources[name] or {}).get(key, []):
-                    found = True
-                    sums = [total + int(row[column]) for total, column in
-                            zip(sums, ('Total de Aulas', 'Comprovadas', 'Pendentes'))]
-            if found and all(sources[n] is not None for n in SEQUENCES):
-                draft['praticas'].append(dict(zip(('polo', 'previstas', 'comprovadas', 'pendentes'), (polo, *sums))))
-                cycles.update(c for name in SEQUENCES if (sources[name] or {}).get(key)
-                              for c in export_cycles[name])
+            rows = apps.get(key, [])
+            if len(rows) == 1:
+                counts = {}
+                for field, column in zip(('previstas', 'comprovadas', 'pendentes'), columns[1][1:]):
+                    try:
+                        value = rows[0][column]
+                        counts[field] = _number(None if pd.isna(value) else value, column, integer=True)
+                    except ValueError:
+                        counts[field] = None
+                    if counts[field] is None:
+                        record_warnings.append(f'{polo}: {column} ausente ou inválida; preenchimento manual necessário.')
+                draft['praticas'].append(dict(polo=polo, **counts))
+                cycles.update(export_cycles[names[1]])
+                if not export_cycles[names[1]]:
+                    record_warnings.append(f'{polo}: apps com ciclo não declarado; não inferido de outras fontes.')
             else:
-                record_warnings.append(f'{polo}: práticas sem cobertura completa; preenchimento manual necessário.')
-            labs = (sources['labs.xlsx'] or {}).get(key, [])
+                record_warnings.append(f'{polo}: práticas sem fonte única; preenchimento manual necessário.')
+            labs = timeline.get(key, [])
             if not labs:
                 record_warnings.append(f'{polo}: agenda e pareceres sem fonte correspondente.')
             for row in labs:
-                cycles.add(_cycle(row['semestre_operacional_x']))
-                finalized = _flag(row['Finalizada']) == 'SIM'
+                try:
+                    cycles.add(_cycle(row['semestre_operacional_x']))
+                except ValueError:
+                    cycles.update(export_cycles[names[2]])
+                    record_warnings.append(f'{polo}: timeline com semestre da linha ausente ou inválido; confira a origem.')
                 performed = _flag(row['Realizada']) == 'SIM'
-                status = 'Finalizada' if finalized else 'Realizada' if performed else 'Agendada' if _flag(row['Agendada']) == 'SIM' else ''
+                status = 'Finalizada' if _flag(row['Finalizada']) == 'SIM' else 'Realizada' if performed else 'Agendada' if _flag(row['Agendada']) == 'SIM' else ''
+                try:
+                    when = _source_date(row['Data realização'] if performed else row['Data agendada'])
+                except (ValueError, TypeError):
+                    when = ''
+                    record_warnings.append(f'{polo}: data da timeline inválida; complete manualmente.')
                 draft['agenda'].append({'polo': polo, 'tipo': _text(row['Tipo auditoria']),
-                                        'ambiente': _text(row['Laboratório']),
-                                        'data': _source_date(row['Data realização'] if performed else row['Data agendada']),
-                                        'auditor': _text(row['Auditor']), 'status': status})
+                    'ambiente': _text(row['Laboratório']), 'data': when,
+                    'auditor': _text(row['Auditor']), 'status': status})
                 draft['laboratorios'].append({'polo': polo, 'laboratorio': _text(row['Laboratório']),
-                                              'parecer': _text(row['Parecer Auditoria'])})
-        approval = []
-        for polo in draft['polos']:
-            rows = (sources['aprovacao.xlsx'] or {}).get(_key(polo), [])
+                                             'parecer': _text(row['Parecer Auditoria'])})
+            rows = followup.get(key, [])
+            value = None
             if len(rows) == 1:
-                approval.append(int(rows[0]['Rep. Sem Retorno']))
+                try:
+                    raw = rows[0]['Rep. Sem Retorno']
+                    value = _number(None if pd.isna(raw) else raw, 'Rep. Sem Retorno', integer=True)
+                except ValueError:
+                    pass
+            if value is None:
+                record_warnings.append(f'{polo}: indicador Rep. Sem Retorno sem fonte única e completa; não equivale ao total de reprovados.')
             else:
-                record_warnings.append(f'{polo}: indicador Rep. Sem Retorno sem fonte única; não equivale ao total de reprovados.')
-        # Missing approval rows cannot establish a zero for the complete portfolio.
-        if approval:
-            draft['reprovados_sem_retorno'] = sum(approval) if len(approval) == len(polos) else None
-            cycles.update(export_cycles['aprovacao.xlsx'])
+                approval.append(value)
+                cycles.update(export_cycles[names[3]])
+                if not export_cycles[names[3]]:
+                    record_warnings.append(f'{polo}: acompanhamento com ciclo não declarado; não inferido de outras fontes.')
+        if len(approval) == len(draft['polos']):
+            draft['reprovados_sem_retorno'] = sum(approval)
         draft['ciclo'] = min(cycles) if cycles else ''
         if len(cycles) > 1:
             record_warnings.append('Fontes de ciclos mistos; confirme a compatibilidade antes de usar.')
-        records[str(index)] = {'label': manager, 'polo_count': len(polos), 'draft': draft,
-                               'warnings': record_warnings, 'source_cycles': sorted(cycles)}
+        records[str(index)] = {'label': group['name'], 'polo_count': len(draft['polos']),
+                               'draft': draft, 'warnings': record_warnings, 'source_cycles': sorted(cycles)}
     return records
 
 

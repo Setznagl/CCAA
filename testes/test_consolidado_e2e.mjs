@@ -38,17 +38,25 @@ try {
   const optionsResponse = await context.request.get(`${base}/api/options/${flow}`, {timeout: 180000});
   assert.equal(optionsResponse.status(), 200);
   const options = (await optionsResponse.json()).options;
-  const record = options.find(item => item.label.toUpperCase().includes('LUCAS BIGHETTI'));
-  assert.ok(record, 'Real portfolio from the local Master');
-  const draftResponse = await context.request.get(`${base}/api/draft/${flow}?id=${record.id}`);
-  const loaded = await draftResponse.json();
-  assert.deepEqual(loaded.source_cycles, ['261']);
+  let record, loaded;
+  for (const item of options.filter(item => item.polo_count > 1)) {
+    const draftResponse = await context.request.get(`${base}/api/draft/${flow}?id=${item.id}`);
+    assert.equal(draftResponse.status(), 200);
+    const candidate = await draftResponse.json();
+    const draft = candidate.draft;
+    if (draft.praticas.length && draft.agenda.length && draft.laboratorios.length &&
+        draft.polos.some(polo => candidate.warnings.some(w => w.startsWith(polo + ':')))) {
+      record = item; loaded = candidate; break;
+    }
+  }
+  assert.ok(record, 'Current sources must cover practices, agenda, labs and a removable polo-specific warning');
+  assert.deepEqual(loaded.source_cycles, ['262']);
   assert.ok(loaded.draft.praticas.length && loaded.draft.agenda.length && loaded.draft.laboratorios.length);
   await page.locator('#record').selectOption(record.id);
   await page.waitForFunction(() => !document.querySelector('#consolidado-editor').disabled);
   assert.equal(await field('polos', 'polo').count(), record.polo_count);
-  assert.equal(await page.locator('#ciclo').inputValue(), '261');
-  assert.match(await page.locator('#source-warnings').textContent(), /261/);
+  assert.equal(await page.locator('#ciclo').inputValue(), '262');
+  assert.match(await page.locator('#source-warnings').textContent(), /262/);
   assert.equal(await field('checklist', 'nota').first().inputValue(), '');
   assert.equal(await page.locator('#prazo_praticas').inputValue(), '');
   const removedPolo = loaded.draft.polos.find(polo => loaded.warnings.some(w => w.startsWith(polo + ':')));
@@ -56,7 +64,7 @@ try {
   const removeIndex = loaded.draft.polos.indexOf(removedPolo);
   await page.locator('[data-remove="polos"]').nth(removeIndex).click();
   assert.equal(await page.locator('#reprovados_sem_retorno').inputValue(), '');
-  await page.locator('#ciclo').fill('26.2');
+  await page.locator('#ciclo').fill('261');
   // All edits below are explicit QA overrides, not operational assertions.
   const keptIndex = loaded.draft.checklist.findIndex(row => row.polo !== removedPolo);
   await field('checklist', 'nota').nth(keptIndex).fill('73.5');
@@ -72,7 +80,7 @@ try {
   assert.equal(await frame.locator('body').evaluate(element => getComputedStyle(element).margin), '0px');
   assert.equal(await frame.locator('script, form, input, select').count(), 0);
   const renderedText = await frame.locator('body').innerText();
-  assert.ok(renderedText.includes('26.2') && renderedText.includes('Fonte real: 261'));
+  assert.ok(renderedText.includes('26.1') && renderedText.includes('Fonte real: 262'));
   assert.ok(renderedText.includes('não atualiza nem certifica'));
   assert.ok(renderedText.includes('Revisão manual de teste') && renderedText.includes('73.5'));
   assert.ok(renderedText.includes('<script>Teste de texto literal</script>'));

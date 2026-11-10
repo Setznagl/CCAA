@@ -1,39 +1,37 @@
-"""Compatibility checks against the untouched, saved cp1252 preview."""
+"""Literal renderer checks against a frozen synthetic pre-migration HTML body."""
 import importlib.util
 from datetime import date, datetime
 from pathlib import Path
 import unittest
 
 SOURCE = Path(__file__).resolve().parents[1] / 'fluxos' / 'AGENDA_SEMANAL_AUDITORIAS'
-MODULE = Path(__file__).with_name('preview_mari.py')
+MODULE = Path(__file__).with_name('preview_AGENDA_SEMANAL_AUDITORIAS.py')
 
 
 def renderer():
     if not MODULE.exists():
         return None
-    spec = importlib.util.spec_from_file_location('preview_mari', MODULE)
+    spec = importlib.util.spec_from_file_location('preview_AGENDA_SEMANAL_AUDITORIAS', MODULE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 def golden_body():
-    saved = (SOURCE / 'previews' / 'adiel_martins_cogna_com_br.html').read_text(encoding='cp1252')
-    # Only transport metadata/comment and file encoding differ from HTMLBody.
-    return saved[saved.index('<html>'):].strip().replace('charset="windows-1252"', 'charset="UTF-8"')
+    return Path(__file__).with_name('mari_original_synthetic_golden.html').read_text(encoding='utf-8')
 
 
 class MariTests(unittest.TestCase):
-    def test_cached_workbook_grouping_matches_saved_body(self):
+    def test_new_workbook_grouping_is_deterministic_and_never_exposes_contact_email(self):
         module = renderer()
-        self.assertTrue(callable(getattr(module, 'load_mari', None)), 'cached Mari loader not implemented')
-        models = module.load_mari(SOURCE)
-        self.assertEqual(len(models), 14)
-        self.assertEqual(sum(m['polo_count'] for m in models.values()), 36)
-        self.assertEqual(list(models), list(module.load_mari(SOURCE)))
-        model = next(m for m in models.values() if m['label'] == 'ADIEL MARTINS')
-        self.assertEqual(module.render_mari(model, date(2026, 9, 11)), golden_body())
-        self.assertNotIn('@', module.render_mari(model, date(2026, 9, 11)))
+        models = module.load_mari(SOURCE.parents[1])
+        self.assertTrue(models)
+        self.assertEqual(list(models), list(module.load_mari(SOURCE.parents[1])))
+        for model in models.values():
+            self.assertEqual(model['polo_count'], len({r['polo'] for r in model['draft']['rows']}))
+            self.assertEqual(model['draft']['email'], '')
+            self.assertFalse(model['draft']['reviewed'])
+            self.assertTrue(model['warnings'])
 
     def test_brazilian_text_date_uses_same_valid_date_branch(self):
         model = {'label': '', 'polo_count': 1, 'rows': [
@@ -60,7 +58,7 @@ class MariTests(unittest.TestCase):
         self.assertIn('>-</td>', html)
         self.assertIn('Nome &amp; &lt;GO&gt;', html)
         self.assertEqual(html.count('>Mesmo polo</td>'), 2)
-        self.assertIn('line-height:1.1">2</span>', html)
+        self.assertIn('line-height:1.1">1</span>', html)
         self.assertLess(html.index('>A marcar</td>'), html.index('&lt;pendente&gt;</td>'))
 
     def test_today_controls_past_highlight_not_saved_preheader(self):

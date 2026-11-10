@@ -22,16 +22,17 @@
   <main>
     <section class="controls" aria-labelledby="page-title">
       <h1 id="page-title">__HEADING__</h1>
-      <p>Base local: <code>__FOLDER__</code></p>
+      <p>Fluxo: <code>__FOLDER__</code></p>
+      <p>Módulo: <code>preview___FOLDER__.py</code></p>
       <p class="note">__NOTE__</p>
-      <form id="form">
+      <form id="form" autocomplete="off">
         <fieldset id="record-controls" __RECORD_STATE__>
         <label id="record-label" for="record">Registro</label>
         <select id="record" required disabled><option value="">Carregando bases…</option></select>
         <div id="date-control" hidden>
           <label for="reference-date">Data usada nos avisos do email</label>
           <input id="reference-date" type="date" required>
-          <p class="hint">Para comparar com a prévia salva de Mari, use 11/09/2026. As datas das auditorias não são alteradas.</p>
+          <p class="hint">Esta referência controla somente os avisos de datas passadas. Selecione/revise separadamente as datas e laboratórios que entrarão na agenda.</p>
         </div>
         </fieldset>
         <button id="generate" type="submit" __GENERATE_STATE__>Gerar HTML de teste</button>

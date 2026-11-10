@@ -6,32 +6,124 @@ Dates use explicit pt-BR weekday names, independent of the host locale.
 from datetime import date, datetime
 from pathlib import Path
 
+import re
+
 from openpyxl import load_workbook
 
 
-def load_mari(data_dir: Path) -> dict[str, dict]:
-    """Read the fixed workbook's cached A:H values only; never refresh formulas."""
-    workbook = load_workbook(data_dir / 'Disparador_auditoria_automatizado_FINAL(1).xlsm',
-                             read_only=True, data_only=True)
-    grouped = {}
+def _records(path, required):
+    workbook = load_workbook(path, read_only=True, data_only=True)
     try:
-        sheet = workbook['Aba de auditorias']
-        for values in sheet.iter_rows(min_row=10, max_col=8, values_only=True):
-            polo, _, group, day, manager, email, _, _ = values
-            polo = _text(polo).strip(' ')
-            email = _text(email).replace('\xa0', ' ').lower().strip(' ').rstrip(';, ')
-            at, dot = email.find('@'), email.rfind('.')
-            # Keep VBA's deliberately weak EmailValido; this is not address validation.
-            if not polo or 'encontrado' in email or not (at > 0 and dot > at + 1):
+        values = iter(workbook.active.values)
+        headers = next(values, ())
+        if not set(required).issubset(headers):
+            raise ValueError(f'{path.name}: colunas obrigatórias ausentes')
+        for index, row in enumerate(values, 2):
+            if not row or not row[0]:
                 continue
-            if email not in grouped:
-                grouped[email] = {'label': _text(manager).strip(' '), 'polo_count': 0, 'rows': []}
-            model = grouped[email]
-            model['rows'].append({'polo': polo, 'grupo': _text(group).strip(' '), 'date': day})
-            model['polo_count'] += 1
+            if str(row[0]).lower().startswith(('applied filters:', 'filtros aplicados:')):
+                break
+            yield index, dict(zip(headers, row))
     finally:
         workbook.close()
-    return {str(index): grouped[email] for index, email in enumerate(sorted(grouped), 1)}
+
+
+def _manager(value):
+    text = _text(value).strip()
+    if not text or 'tbd' in text.casefold() or text.casefold() in {'-', 'não informado', 'nao informado'}:
+        return ''
+    return text
+
+
+def load_mari(root: Path) -> dict[str, dict]:
+    """Timeline owns the roster; contact emails belong to poles, never to GOs."""
+    folder = Path(root) / 'databases/09-11-26'
+    contacts = {}
+    for _, row in _records(folder / 'auditoria-tabela-contatos.xlsx', ('Polo', 'Gerente Operacional')):
+        polo = _text(row['Polo']).strip()
+        contacts.setdefault(polo, set()).add(_manager(row['Gerente Operacional']))
+    grouped = {}
+    for index, row in _records(folder / 'auditoria-timeline-262.xlsx', ('Polo', 'Laboratório', 'Data agendada', 'semestre_operacional_x')):
+        polo = _text(row['Polo']).strip()
+        names = contacts.get(polo, set())
+        manager = next(iter(names)) if len(names) == 1 and '' not in names else ''
+        key = manager.casefold()
+        if key not in grouped:
+            grouped[key] = {'label': manager or 'Revisão manual — GO ausente/TBD/ambíguo',
+                            'draft': {'label': manager, 'email': '', 'reviewed': False, 'rows': []},
+                            'warnings': [], 'source_cycles': [], 'polo_count': 0}
+        model = grouped[key]
+        parsed = _date(row['Data agendada'])
+        model['draft']['rows'].append({'id': str(index), 'polo': polo,
+            'laboratorio': _text(row['Laboratório']).strip(), 'grupo': '',
+            'date': parsed.isoformat(timespec='minutes') if parsed else '', 'selected': True})
+        cycle = _text(row['semestre_operacional_x']).strip()
+        if cycle and cycle not in model['source_cycles']:
+            model['source_cycles'].append(cycle)
+        if not manager:
+            warning = f'{polo}: GO ausente, TBD ou ambíguo; informe o GO e selecione apenas sua carteira.'
+            if warning not in model['warnings']: model['warnings'].append(warning)
+        if not parsed:
+            model['warnings'].append(f'{polo}: data de agendamento ausente ou inválida; preencher ou desmarcar a linha.')
+    result = {}
+    for index, key in enumerate(sorted(grouped), 1):
+        model = grouped[key]
+        model['polo_count'] = len({r['polo'] for r in model['draft']['rows']})
+        model['warnings'][:0] = [
+            'Todas as datas/laboratórios estão selecionados; não há filtro automático de semana. Revise e desmarque as linhas fora do período desejado.',
+            'Grupo econômico por polo e email do GO não constam das novas bases: preenchimento manual obrigatório. O email dos contatos é do gestor de polo e não será reutilizado.']
+        result[str(index)] = model
+    return result
+
+def review_mari(draft, record):
+    """Validate only supplements; immutable source identity is read server-side."""
+    def text(value, field, limit=300):
+        if not isinstance(value, str) or not value.strip() or len(value) > limit or any(ord(c) < 32 for c in value):
+            raise ValueError(f'{field}: preencha um texto válido (até {limit} caracteres)')
+        return value.strip()
+
+    if not isinstance(draft, dict) or draft.get('reviewed') is not True:
+        raise ValueError('Confirme a revisão das linhas e do período antes de gerar')
+    label = text(draft.get('label'), 'Gerente Operacional')
+    if not _manager(label):
+        raise ValueError('Gerente Operacional: substitua o placeholder por um nome válido')
+    email = text(draft.get('email'), 'Email do GO', 254)
+    if not re.fullmatch(r'[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+', email):
+        raise ValueError('Email do GO: informe um endereço válido')
+    rows = draft.get('rows')
+    source = {r['id']: r for r in record['draft']['rows']}
+    if not isinstance(rows, list) or not rows or len(rows) > min(len(source), 10000):
+        raise ValueError('Linhas: selecione ao menos uma linha da base (máximo 10000)')
+    seen, groups, selected = set(), {}, []
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get('id'), str) or row['id'] not in source or row['id'] in seen:
+            raise ValueError('Linha inválida, duplicada ou inexistente na base')
+        seen.add(row['id'])
+        original = source[row['id']]
+        if any(row.get(key) != original[key] for key in ('polo', 'laboratorio')):
+            raise ValueError('Polo/laboratório: a identificação da fonte não pode ser alterada')
+        if not isinstance(row.get('selected'), bool):
+            raise ValueError('Seleção da linha inválida')
+        if not row['selected']:
+            continue
+        group = text(row.get('grupo'), 'Grupo econômico')
+        if 'tbd' in group.casefold():
+            raise ValueError('Grupo econômico: substitua o placeholder por um grupo válido')
+        if original['polo'] in groups and groups[original['polo']] != group:
+            raise ValueError('Grupo econômico deve ser o mesmo em todas as linhas de um polo')
+        groups[original['polo']] = group
+        value = text(row.get('date'), 'Data de agendamento', 16)
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?', value):
+            raise ValueError('Data de agendamento: informe data/hora ISO válida')
+        try:
+            day = datetime.fromisoformat(value)
+        except ValueError:
+            raise ValueError('Data de agendamento inválida') from None
+        selected.append({'polo': original['polo'], 'laboratorio': original['laboratorio'], 'grupo': group, 'date': day})
+    if not selected:
+        raise ValueError('Selecione ao menos uma linha de agendamento')
+    return {'label': label, 'polo_count': len(groups), 'rows': selected}
+
 
 _WEEKDAYS = ('segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira',
              'sexta-feira', 'sábado', 'domingo')
@@ -80,21 +172,27 @@ def _row(row, index, today):
                 f'<span style="font-size:10.5px;color:{detail_color}">{detail}</span></td>')
     else:
         cell = f'<td style="{base}text-align:center;color:#444444">{_esc(text)}</td>'
+    laboratory = row.get('laboratorio', '')
+    polo = _esc(row['polo'])
+    if laboratory:
+        polo += f'<br/><span style="font-size:10.5px;color:#8a8a8a">{_esc(laboratory)}</span>'
+        if day:
+            cell = cell.replace('</td>', f'<br/><span style="font-size:10.5px;color:#8a8a8a">{day:%H:%M}</span></td>')
     group = _text(row['grupo']).strip(' ') or '-'
     return (f'<tr><td style="background:{background};padding:11px 0 11px 14px;border-bottom:1px solid #E3E3E3;'
             f'border-left:3px solid {stripe};font-size:12px;color:#a9a9a9">{index}</td>'
-            f'<td style="{base}font-weight:bold;color:#5B2A86">{_esc(row["polo"])}</td>'
+            f'<td style="{base}font-weight:bold;color:#5B2A86">{polo}</td>'
             f'<td style="{base}color:#444444">{_esc(group)}</td>{cell}</tr>')
 
 
 def render_mari(model: dict, today: date) -> str:
     """Return HTMLBody only; today replaces VBA Date without reading the clock."""
     name = _esc(_text(model['label']).strip(' ') or 'Gerente Operacional')
-    count = len(model['rows'])
+    count = len({row['polo'] for row in model['rows']})
     noun = 'polo' if count == 1 else 'polos'
     dates = [day for row in model['rows'] if (day := _date(row['date'])) is not None]
     period = 'A definir'
-    preheader = f'{count} auditoria(s) de laboratório na sua carteira.'
+    preheader = f'{len(model["rows"])} auditoria(s) de laboratório na sua carteira.'
     if dates:
         first, last = min(dates), max(dates)
         period = first.strftime('%d/%m/%Y') if first == last else first.strftime('%d/%m') + ' a ' + last.strftime('%d/%m/%Y')

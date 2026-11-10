@@ -4,7 +4,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import pandas as pd
 from openpyxl import Workbook
 
 
@@ -25,7 +24,7 @@ SAMPLE = ROOT / 'fluxos/SITUACAO_REGULARIZACAO_DOS_POLOS/sample.html'
 class ConsolidadoTests(unittest.TestCase):
     def adapter(self):
         try:
-            return importlib.import_module('preview_consolidado')
+            return importlib.import_module('preview_AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS')
         except ModuleNotFoundError:
             self.fail('Loader/renderer consolidado ainda não implementado')
 
@@ -42,66 +41,172 @@ class ConsolidadoTests(unittest.TestCase):
         self.assertEqual(record['source_cycles'], [])
         self.assertTrue(record['warnings'])
 
-    def test_master_roster_four_sequences_labs_and_approval(self):
-        adapter = self.adapter()
+
+    def sources(self, root):
+        data = root / 'databases/09-11-26'
+        data.mkdir(parents=True)
+        sheet(data / 'auditoria-tabela-contatos.xlsx', ['Polo', 'Nome', 'E-mail', 'Perfil'], [
+            ['A', 'Ana', 'shared@example.test', 'GESTOR PRINCIPAL'],
+            ['A', 'Bia', 'shared@example.test', 'GESTOR PRINCIPAL'],
+            ['B', 'Ana', 'ana@example.test', 'GESTOR PRINCIPAL'],
+            ['Fora', 'Ana', 'ana@example.test', 'GESTOR PRINCIPAL'],
+            ['A', 'Tutor', 'tutor@example.test', 'TUTOR']])
+        sheet(data / 'auditoria-apps-prazo.xlsx', ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'], [
+            ['A', 12, 3, 9], ['B', 10, 0, 10],
+            ['Applied filters:\nsemestre_operacional is 262', None, None, None]])
+        sheet(data / 'auditoria-polos-acompanhamento-262.xlsx', ['Polo', 'Rep. Sem Retorno'], [
+            ['A', 2], ['B', 0], ['Filtros aplicados:\nsemestre_operacional_x é 262', None]])
+        sheet(data / 'auditoria-timeline-262.xlsx', ['Polo', 'semestre_operacional_x', 'Laboratório',
+            'Tipo auditoria', 'Auditor', 'Agendada', 'Data agendada', 'Realizada',
+            'Data realização', 'Finalizada', 'Parecer Auditoria'], [
+            ['A', 262, 'Lab', 'Regular', 'Auditora', 'Sim', '2026-11-12', 'Não', None, 'Não', 'Reprovado'],
+            ['Applied filters:\nsemestre_operacional_x is 262', None, None, None, None, None, None, None, None, None, None]])
+        return data
+
+    def test_new_sources_preserve_people_roster_and_aggregated_practices(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            data = root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA'
-            data.mkdir(parents=True)
-            (data / 'Base de Polos - Master (1).xlsb').touch()
-            headers = ['NOME UNIDADE SISTEMA', 'GESTOR DE POLO / DIRETOR UNIDADE',
-                       'CANAL', 'STATUS DA UNIDADE/POLO']
-            master = pd.DataFrame([
-                ['POLO (999)A', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO'],
-                [' polo (999)a  ', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO'],
-                ['POLO SEM BASE', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO'],
-                ['POLO EXCLUIDO', 'Gestora', 'PROPRIO', 'UNIDADE EM OPERACAO/CAPTACAO'],
-                ['POLO FECHADO', 'Gestora', 'PARCEIRO', 'ENCERRADO'],
-            ], columns=headers)
-            for name in ('sequenciaa1', 'sequenciaa2', 'sequencia3', 'sequencia4'):
-                sheet(data / (name + '.xlsx'), ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'],
-                      [['POLO (999)A', 12, 3, 9], ['OUTRO (999)A', 100, 0, 100],
-                       [None, None, None, None],
-                       ['Filtros aplicados:\nsemestre_operacional é 261', None, None, None]])
-            sheet(data / 'labs.xlsx', ['Polo', 'semestre_operacional_x', 'Laboratório',
-                  'Tipo auditoria', 'Auditor', 'Agendada', 'Data agendada', 'Realizada',
-                  'Data realização', 'Finalizada', 'Parecer Auditoria'], [
-                      ['POLO (999)A', 261, 'Lab A', 'Regular', 'Auditora', 'Sim', '2026-05-22', 'Não', None, 'Não', 'Reprovado'],
-                      ['POLO (999)A', 261, 'Lab B', 'Recorrente', 'Outro', 'Sim', '2026-05-20', 'Sim', '2026-05-21', 'Não', ''],
-                      ['POLO (999)A', 261, 'Lab C', 'Regular', 'Outro', 'Sim', '2026-05-20', 'Sim', '2026-05-21', 'Sim', 'Aprovado'],
-                  ])
-            sheet(data / 'aprovacao.xlsx', ['Polo', 'Rep. Sem Retorno'], [['POLO (999)A', 7], ['POLO SEM BASE', 0]])
-            original_read = pd.read_excel
+            self.sources(root)
+            records = self.adapter().load_consolidado(root)
+        loaded = {r['label']: r for key, r in records.items() if key != 'manual'}
+        self.assertEqual(set(loaded), {'Ana', 'Bia'})
+        ana = loaded['Ana']
+        self.assertEqual(ana['draft']['polos'], ['A', 'B'])
+        self.assertEqual(ana['polo_count'], 2)
+        self.assertEqual(ana['draft']['praticas'][0], {'polo': 'A', 'previstas': 12, 'comprovadas': 3, 'pendentes': 9})
+        self.assertEqual(ana['draft']['reprovados_sem_retorno'], 2)
+        self.assertEqual(ana['source_cycles'], ['262'])
+        self.assertEqual(ana['draft']['agenda'][0]['status'], 'Agendada')
+        self.assertEqual(ana['draft']['agenda'][0]['data'], '2026-11-12')
+        self.assertEqual(ana['draft']['laboratorios'][0]['parecer'], 'Reprovado')
+        self.assertEqual(ana['draft']['checklist'][0]['auditor'], '')
+        self.assertIsNone(ana['draft']['checklist'][0]['nota'])
+        self.assertTrue(any('amb' in w.lower() for w in ana['warnings']))
+        self.assertEqual(loaded['Bia']['draft']['polos'], ['A'])
 
-            def guarded(path, **kwargs):
-                if Path(path).suffix == '.xlsb':
-                    self.assertEqual(kwargs['sheet_name'], 'BASE_DE_UNIDADES')
-                    self.assertEqual(set(kwargs['usecols']), set(headers))
-                    self.assertEqual(kwargs['engine'], 'pyxlsb')
-                    return master
-                self.assertNotEqual(Path(path).name, 'emails.xlsx')
-                return original_read(path, **kwargs)
+    def test_emails_export_is_distinct_atomic_regenerated_and_not_html_source(self):
+        import os
+        from openpyxl import load_workbook
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            data = self.sources(root)
+            adapter = self.adapter()
+            adapter.load_consolidado(root)
+            output = data / 'emails.xlsx'
+            self.assertTrue(output.is_file(), 'Planilha intermediária não foi gerada')
+            def contents():
+                wb = load_workbook(output)
+                rows = list(wb.active.values)
+                self.assertFalse(any(c.data_type == 'f' for row in wb.active for c in row))
+                wb.close()
+                return rows
+            self.assertEqual(contents(), [('Polo', 'Email', 'Enviar'), ('A', 'shared@example.test', None), ('B', 'ana@example.test', None)])
+            stamp = output.stat().st_mtime_ns
+            adapter.load_consolidado(root)
+            self.assertEqual(output.stat().st_mtime_ns, stamp)
+            source = data / 'auditoria-tabela-contatos.xlsx'
+            sheet(source, ['Polo', 'Nome', 'E-mail', 'Perfil'], [
+                ['A', 'Ana', 'a@example.test', 'GESTOR PRINCIPAL'],
+                ['A', 'Bia', 'b@example.test', 'GESTOR PRINCIPAL'],
+                ['A', 'Bia', 'b@example.test', 'GESTOR PRINCIPAL']])
+            os.utime(source, ns=(1, 1))
+            adapter.load_consolidado(root)
+            self.assertEqual(contents()[1], ('A', 'a@example.test;b@example.test', None))
+            wb = load_workbook(output)
+            wb.active['A2'] = 'ADULTERADO'
+            wb.save(output)
+            wb.close()
+            loaded = adapter.load_consolidado(root)
+            self.assertEqual(loaded['1']['draft']['polos'], ['A'])
+            with patch.object(adapter.os, 'replace', side_effect=PermissionError('bloqueada')):
+                os.utime(source, ns=(2, 2))
+                loaded = adapter.load_consolidado(root)
+            self.assertTrue(any('emails.xlsx' in w for w in loaded['1']['warnings']))
+            self.assertEqual(contents()[1][0], 'ADULTERADO', 'Falha não deve destruir arquivo anterior')
+            self.assertEqual(list(data.glob('.emails-*')), [])
+            with patch.object(adapter.os, 'replace', side_effect=PermissionError('bloqueada')), patch.object(adapter.Path, 'unlink', side_effect=PermissionError('limpeza bloqueada')):
+                try:
+                    loaded = adapter.load_consolidado(root)
+                except PermissionError:
+                    self.fail('Falha na limpeza temporária não pode derrubar a prévia')
+            self.assertTrue(any('emails.xlsx' in w for w in loaded['1']['warnings']))
 
-            with patch('pandas.read_excel', side_effect=guarded):
-                records = adapter.load_consolidado(root)
-        loaded = [v for k, v in records.items() if k != 'manual']
-        self.assertEqual(len(loaded), 1, 'A carteira da Master ainda não foi carregada')
-        record, = loaded
-        draft = record['draft']
-        self.assertEqual(record['label'], 'Gestora')
-        self.assertEqual(record['polo_count'], 2)
-        self.assertEqual(draft['praticas'], [{'polo': 'POLO (999)A', 'previstas': 48, 'comprovadas': 12, 'pendentes': 36}])
-        self.assertEqual(draft['reprovados_sem_retorno'], 7)
-        self.assertEqual([r['status'] for r in draft['agenda']], ['Agendada', 'Realizada', 'Finalizada'])
-        self.assertEqual(draft['agenda'][1]['data'], '2026-05-21')
-        self.assertEqual(draft['ciclo'], '261')
-        self.assertEqual(record['source_cycles'], ['261'])
-        self.assertEqual(len(draft['checklist']), 2)
-        self.assertIsNone(draft['checklist'][0]['nota'])
-        self.assertEqual(draft['checklist'][0]['auditor'], '')
-        self.assertTrue(any('POLO SEM BASE' in w for w in record['warnings']))
-        self.assertTrue(any('checklist' in w.lower() for w in record['warnings']))
-        self.assertEqual(draft['prazo_auditorias'], '')
+    def test_unassigned_polo_is_identified_only_in_manual_review_warnings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            data = self.sources(root)
+            sheet(data / 'auditoria-apps-prazo.xlsx',
+                  ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'],
+                  [['A', 12, 3, 9], ['Polo sem associação', 10, 0, 10]])
+            records = self.adapter().load_consolidado(root)
+        self.assertTrue(any('POLO SEM ASSOCIAÇÃO' in warning
+                            for warning in records['manual']['warnings']))
+        for key, record in records.items():
+            if key != 'manual':
+                self.assertFalse(any('POLO SEM ASSOCIAÇÃO' in warning
+                                     for warning in record['warnings']))
+
+    def test_missing_duplicate_and_invalid_counts_remain_manual(self):
+        for value in (None, -1, 1.5, 'sem dado'):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                data = self.sources(root)
+                sheet(data / 'auditoria-apps-prazo.xlsx', ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'], [['A', value, 0, 1]])
+                sheet(data / 'auditoria-polos-acompanhamento-262.xlsx', ['Polo', 'Rep. Sem Retorno'], [['A', 2], ['A', 2]])
+                record = self.adapter().load_consolidado(root)['1']
+                self.assertIsNone(record['draft']['praticas'][0]['previstas'])
+                self.assertEqual(record['draft']['praticas'][0]['comprovadas'], 0)
+                self.assertIsNone(record['draft']['reprovados_sem_retorno'])
+                self.assertTrue(any('apps com ciclo não declarado' in w for w in record['warnings']))
+                self.assertEqual(record['source_cycles'], ['262'])
+
+    def test_no_filename_cycle_or_legacy_fallback_and_corrupt_source_is_warning(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            data = self.sources(root)
+            (data / 'auditoria-timeline-262.xlsx').write_bytes(b'corrompida')
+            sheet(data / 'auditoria-apps-prazo.xlsx', ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'], [['A', 12, 3, 9]])
+            sheet(data / 'auditoria-polos-acompanhamento-262.xlsx', ['Polo', 'Rep. Sem Retorno'], [['A', 0]])
+            record = self.adapter().load_consolidado(root)['1']
+            self.assertEqual(record['source_cycles'], [])
+            self.assertEqual(record['draft']['ciclo'], '')
+            self.assertEqual(record['draft']['reprovados_sem_retorno'], 0)
+            self.assertTrue(any('inválida' in w for w in record['warnings']))
+            (data / 'auditoria-tabela-contatos.xlsx').unlink()
+            self.assertEqual(list(self.adapter().load_consolidado(root)), ['manual'])
+
+    def test_export_blocks_excel_formula_prefixes_and_keeps_missing_contacts(self):
+        from openpyxl import load_workbook
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            data = self.sources(root)
+            sheet(data / 'auditoria-apps-prazo.xlsx', ['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'], [['+Polo', 1, 0, 1]])
+            sheet(data / 'auditoria-tabela-contatos.xlsx', ['Polo', 'Nome', 'E-mail', 'Perfil'], [['+Polo', '+Nome', '+email@example.test', 'GESTOR PRINCIPAL']])
+            self.adapter().load_consolidado(root)
+            wb = load_workbook(data / 'emails.xlsx')
+            rows = list(wb.active.values)
+            self.assertIn(("'+Polo", "'+email@example.test", None), rows)
+            self.assertIn(('A', None, None), rows)
+            self.assertFalse(any(c.data_type == 'f' for row in wb.active for c in row))
+            wb.close()
+
+    def test_timeline_preserves_labs_dates_statuses_and_source_cycles(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            data = self.sources(root)
+            headers = ['Polo', 'semestre_operacional_x', 'Laboratório', 'Tipo auditoria', 'Auditor', 'Agendada', 'Data agendada', 'Realizada', 'Data realização', 'Finalizada', 'Parecer Auditoria']
+            sheet(data / 'auditoria-timeline-262.xlsx', headers, [
+                ['A', '26.1', 'Lab 1', 'Regular', 'X', 'Não', None, 'Não', None, 'Não', ''],
+                ['A', 262, 'Lab 2', 'Regular', 'Y', 'Sim', '2026-11-11', 'Sim', '2026-11-12', 'Não', ''],
+                ['A', 262, 'Lab 3', 'Regular', 'Z', 'Sim', None, 'Sim', '2026-11-13', 'Sim', 'Aprovado']])
+            adapter = self.adapter()
+            record = adapter.load_consolidado(root)['1']
+            self.assertEqual(record['source_cycles'], ['261', '262'])
+            self.assertEqual([r['status'] for r in record['draft']['agenda']], ['', 'Realizada', 'Finalizada'])
+            self.assertEqual([r['data'] for r in record['draft']['agenda']], ['', '2026-11-12', '2026-11-13'])
+            html = adapter.render_consolidado(record['draft'], SAMPLE, record['source_cycles'], record['warnings'])
+            self.assertNotIn('NaT', html)
+            self.assertIn('ciclos mistos', html)
 
     def test_render_preserves_art_without_sample_data_and_escapes_text(self):
         adapter = self.adapter()
@@ -191,67 +296,7 @@ class ConsolidadoTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 adapter.render_consolidado(draft, SAMPLE)
 
-    def test_loader_handles_blank_lab_dates_and_partial_corrupt_sources(self):
-        adapter = self.adapter()
-        master = pd.DataFrame([['Polo', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO']],
-                              columns=adapter.MASTER_COLUMNS)
-        labs = pd.DataFrame([{'Polo': 'Polo', 'semestre_operacional_x': 261,
-                              'Laboratório': 'Lab', 'Tipo auditoria': 'Regular', 'Auditor': '',
-                              'Agendada': 'Não', 'Data agendada': pd.NaT, 'Realizada': 'Não',
-                              'Data realização': pd.NaT, 'Finalizada': 'Não', 'Parecer Auditoria': ''}])
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            data = root / 'fluxos/AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA'
-            data.mkdir(parents=True)
-            (data / 'Base de Polos - Master (1).xlsb').touch()
 
-            def read(path, **kwargs):
-                if Path(path).suffix == '.xlsb':
-                    return master
-                if Path(path).name == 'labs.xlsx':
-                    return labs
-                raise ValueError('Arquivo incompleto')
-
-            with patch('pandas.read_excel', side_effect=read):
-                records = adapter.load_consolidado(root)
-        record = records['1']
-        self.assertEqual(record['draft']['agenda'][0]['data'], '')
-        self.assertEqual(record['draft']['agenda'][0]['status'], '')
-        self.assertEqual(record['draft']['praticas'], [])
-        self.assertIsNone(record['draft']['reprovados_sem_retorno'])
-        html = adapter.render_consolidado(record['draft'], SAMPLE, record['source_cycles'], record['warnings'])
-        self.assertNotIn('NaT', html)
-        self.assertIn('Fonte sequenciaa1.xlsx ausente ou inválida', html)
-
-    def test_invalid_source_counts_and_corrupt_workbook_become_manual_warnings(self):
-        from zipfile import BadZipFile
-        adapter = self.adapter()
-        master = pd.DataFrame([['Polo', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO']],
-                              columns=adapter.MASTER_COLUMNS)
-        for value in (float('nan'), -1, 1.5, 'sem dado'):
-            with self.subTest(value=value), tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
-                data = root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA'
-                data.mkdir(parents=True)
-                (data / 'Base de Polos - Master (1).xlsb').touch()
-
-                def read(path, **kwargs):
-                    if Path(path).suffix == '.xlsb':
-                        return master
-                    if Path(path).name in adapter.SEQUENCES:
-                        return pd.DataFrame([['Polo', value, 0, 0]], columns=['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'])
-                    raise BadZipFile('Fonte corrompida')
-
-                try:
-                    with patch('pandas.read_excel', side_effect=read):
-                        records = adapter.load_consolidado(root)
-                except Exception as error:
-                    self.fail(f'Fonte inválida deveria virar aviso, não {type(error).__name__}')
-                record = records['1']
-                self.assertEqual(record['draft']['praticas'], [])
-                self.assertEqual(record['draft']['agenda'], [])
-                self.assertIsNone(record['draft']['reprovados_sem_retorno'])
-                self.assertTrue(any('inválida' in w for w in record['warnings']))
 
     def test_optional_blanks_safe_links_numeric_zero_and_local_template(self):
         adapter = self.adapter()
@@ -274,75 +319,8 @@ class ConsolidadoTests(unittest.TestCase):
         self.assertNotIn('percentual', draft['praticas'][0])
         self.assertNotIn('agenda', draft)
 
-    def test_no_academic_source_does_not_invent_cycle(self):
-        adapter = self.adapter()
-        master = pd.DataFrame([['Polo', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO']],
-                              columns=adapter.MASTER_COLUMNS)
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            data = root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA'
-            data.mkdir(parents=True)
-            (data / 'Base de Polos - Master (1).xlsb').touch()
 
-            def read(path, **kwargs):
-                if Path(path).suffix == '.xlsb':
-                    return master
-                raise FileNotFoundError(path)
 
-            with patch('pandas.read_excel', side_effect=read):
-                record = adapter.load_consolidado(root)['1']
-        self.assertEqual(record['source_cycles'], [])
-        self.assertEqual(record['draft']['ciclo'], '')
-        self.assertEqual(record['draft']['praticas'], [])
-
-    def test_export_without_semester_does_not_assume_261(self):
-        adapter = self.adapter()
-        master = pd.DataFrame([['Polo', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO']],
-                              columns=adapter.MASTER_COLUMNS)
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            data = root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA'
-            data.mkdir(parents=True)
-            (data / 'Base de Polos - Master (1).xlsb').touch()
-
-            def read(path, **kwargs):
-                if Path(path).suffix == '.xlsb':
-                    return master
-                if Path(path).name in adapter.SEQUENCES:
-                    return pd.DataFrame([['Polo', 12, 0, 12]],
-                                        columns=['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'])
-                raise FileNotFoundError(path)
-
-            with patch('pandas.read_excel', side_effect=read):
-                record = adapter.load_consolidado(root)['1']
-        self.assertEqual(record['source_cycles'], [])
-        self.assertEqual(record['draft']['ciclo'], '')
-        self.assertTrue(any('ciclo não declarado' in warning for warning in record['warnings']))
-        self.assertEqual(record['draft']['praticas'][0]['previstas'], 48)
-
-    def test_export_filter_metadata_carries_real_cycle(self):
-        adapter = self.adapter()
-        master = pd.DataFrame([['Polo', 'Gestora', 'PARCEIRO', 'UNIDADE EM OPERACAO/CAPTACAO']],
-                              columns=adapter.MASTER_COLUMNS)
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            data = root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA'
-            data.mkdir(parents=True)
-            (data / 'Base de Polos - Master (1).xlsb').touch()
-
-            def read(path, **kwargs):
-                if Path(path).suffix == '.xlsb':
-                    return master
-                if Path(path).name in adapter.SEQUENCES:
-                    return pd.DataFrame([['Polo', 12, 0, 12],
-                                         ['Filtros aplicados:\nsemestre_operacional é 262', None, None, None]],
-                                        columns=['Polo', 'Total de Aulas', 'Comprovadas', 'Pendentes'])
-                raise FileNotFoundError(path)
-
-            with patch('pandas.read_excel', side_effect=read):
-                record = adapter.load_consolidado(root)['1']
-        self.assertEqual(record['source_cycles'], ['262'])
-        self.assertEqual(record['draft']['ciclo'], '262')
 
 
 if __name__ == '__main__':
