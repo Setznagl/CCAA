@@ -18,12 +18,12 @@
     <section class="controls" aria-labelledby="page-title">
       <p>Fluxo: <code>AGENDA_FAST_TRACK_INFRA_2026</code></p>
       <h1 id="page-title">DIsparo em lote</h1>
-      <p class="note">Carregue os polos reprovados, revise os contatos e baixe um ZIP único. Uma mensagem por polo, com o mesmo modelo Fast Track, sem alterar seu conteúdo.</p>
-      <p id="status" role="status" aria-live="polite">Carregue os reprovados para começar. Até 500 mensagens por lote.</p>
+      <p class="note">Carregue os polos com checklist pendente, revise os contatos e baixe um ZIP único. Uma mensagem por polo, com assunto identificado e o mesmo comunicado Fast Track.</p>
+      <p id="status" role="status" aria-live="polite">Carregue os polos com checklist pendente para começar. Até 500 mensagens por lote.</p>
       <form id="batch-form" autocomplete="off" novalidate>
         <h2>1 · Carregar lote Fast Track</h2>
-        <button id="batch-load-fast-track" type="button">Carregar polos reprovados</button>
-        <p class="hint">A base temporária polos-irregulares-fasttrack identifica os polos com Reprovado em pelo menos um laboratório. Contatos vêm somente da gerencial e dos cadastros em databases/09-11-26. O modelo permanece intacto, inclusive o prazo histórico 31/08.</p>
+        <button id="batch-load-fast-track" type="button">Carregar polos com checklist pendente</button>
+        <p class="hint">Entram polos com Data Checklist de Laboratório vazia em polos-irregulares-fasttrack ou DATA CL vazia em auditoria-infraestrutura-fasttrack. Os critérios são independentes: basta um deles, sem repetir o polo. Status Reprovado sozinho não inclui nem exclui. Contatos vêm somente da gerencial e dos cadastros em databases/09-11-26; registros sem identificação segura ficam para preenchimento manual. O comunicado CLFT informa prazo de 20/11/2026, sem prorrogações.</p>
         <details id="batch-manual">
         <summary>Alternativa manual: carregar HTML e planilha próprios</summary>
         <label for="batch-html">Arquivo HTML aprovado (.html, UTF-8, até 1 MiB)</label>
@@ -33,9 +33,9 @@
         <input id="batch-xlsx" type="file" accept=".xlsx">
         <p class="hint">Use a aba DESTINATARIOS. Enviar = SIM ou X pré-seleciona; vazio não seleciona. Esta alternativa substitui o cruzamento automático; revise todas as cópias. Uma linha = uma mensagem.</p>
         </details>
-        <p class="hint">O mesmo HTML será usado em todas as mensagens, sem personalização. Não carregue o exemplo com prazo histórico sem aprová-lo. Imagens locais, anexos e assinatura do Outlook não são incorporados automaticamente; confira a aparência no teste pelo Outlook.</p>
+        <p class="hint">O mesmo corpo HTML será usado em todas as mensagens, sem campos de conteúdo. Somente o assunto recebe o nome do polo. Imagens locais, anexos e assinatura do Outlook não são incorporados automaticamente; confira a aparência no teste pelo Outlook.</p>
         <button id="batch-preview-button" type="button" disabled>Conferir HTML do lote</button>
-        <label for="batch-subject">Assunto padrão (usado quando a linha não tem assunto)</label>
+        <label for="batch-subject">Assunto padrão da alternativa manual (no lote automático, revise o assunto por polo)</label>
         <input id="batch-subject" type="text" maxlength="255">
         <label for="batch-sender">Conta remetente do Outlook (opcional)</label>
         <input id="batch-sender" type="email" maxlength="254" placeholder="Vazio: conta padrão do Outlook">

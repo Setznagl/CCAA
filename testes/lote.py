@@ -14,6 +14,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 COLUMNS = ['Enviar', 'Polo', 'Para', 'CC', 'CCO', 'Assunto']
 MAX_ROWS = 500
+FAST_TRACK_SUBJECT = '[ PREENCHIMENTO OBRIGATÓRIO - CL INSUMOS e CL REVENUE SHARE] Novo prazo máximo para preenchimento - '
 
 
 def fast_track_batch(root):
@@ -22,38 +23,46 @@ def fast_track_batch(root):
 
     root = Path(root)
     directory = load_directory(root / 'databases/09-11-26')
-    book = load_workbook(root / 'databases/acompamento/polos-irregulares-fasttrack.xlsx',
-                         read_only=True, data_only=False, keep_links=False)
-    try:
-        sheet = book.worksheets[0]
-        values = sheet.iter_rows()
-        headers = [cell.value for cell in next(values)]
-        required = ['NOME UNIDADE SISTEMA (time infra)', 'Status Lab. Multidisciplinar',
-                    'Status Laboratório de Enfermagem']
-        if not set(required).issubset(headers):
-            raise ValueError('Fast Track: colunas de polo e status obrigatórias ausentes')
-        columns = [headers.index(header) for header in required]
-        failed = {}
-        for cells in values:
-            selected = [cells[index] for index in columns]
-            if any(cell.data_type == 'f' for cell in selected):
-                raise ValueError('Fast Track: use valores, não fórmulas, nas colunas de polo e status')
-            polo, *statuses = [cell.value for cell in selected]
-            identity = key(polo)
-            if not person(polo) or identity.startswith(('FILTROS APLICADOS:', 'APPLIED FILTERS:')):
-                continue
-            if any(key(status) == 'REPROVADO' for status in statuses):
-                failed.setdefault(identity, str(polo).strip())
-    finally:
-        book.close()
-    if not failed or len(failed) > MAX_ROWS:
-        raise ValueError('Fast Track: esperado entre 1 e 500 polos reprovados')
+    eligible = {}
+    for filename, polo_column, date_column, reason in (
+        ('polos-irregulares-fasttrack.xlsx', 'NOME UNIDADE SISTEMA (time infra)',
+         'Data Checklist de Laboratório', 'Checklist de laboratório'),
+        ('auditoria-infraestrutura-fasttrack.xlsx', 'UNIDADE', 'DATA CL', 'Checklist de infraestrutura'),
+    ):
+        book = load_workbook(root / 'databases/acompamento' / filename,
+                             read_only=True, data_only=False, keep_links=False)
+        try:
+            sheet = book['Planilha1'] if filename == 'auditoria-infraestrutura-fasttrack.xlsx' else book.worksheets[0]
+            values = sheet.iter_rows()
+            headers = [cell.value for cell in next(values)]
+            if not {polo_column, date_column}.issubset(headers):
+                raise ValueError(f'{filename}: colunas de polo e data obrigatórias ausentes')
+            polo_index, date_index = headers.index(polo_column), headers.index(date_column)
+            for cells in values:
+                polo_cell, date_cell = cells[polo_index], cells[date_index]
+                polo = polo_cell.value
+                identity = key(polo)
+                if not person(polo) or identity.startswith(('FILTROS APLICADOS:', 'APPLIED FILTERS:')):
+                    continue
+                if any(cell.data_type in {'f', 'e'} for cell in (polo_cell, date_cell)):
+                    raise ValueError(f'{filename}: use valores sem fórmulas ou erros nas colunas de polo e data')
+                date_value = date_cell.value
+                if date_value is None or (isinstance(date_value, str) and not date_value.strip()):
+                    record = eligible.setdefault(identity, {'polo': str(polo).strip(), 'pendencias': []})
+                    if reason not in record['pendencias']:
+                        record['pendencias'].append(reason)
+        finally:
+            book.close()
+    if not eligible or len(eligible) > MAX_ROWS:
+        raise ValueError('Fast Track: esperado entre 1 e 500 polos com checklist pendente')
     rows = []
-    for identity, polo in sorted(failed.items()):
+    for identity, record in sorted(eligible.items()):
+        polo = record['polo']
         contact = directory['polos'].get(identity, {})
         cc = ';'.join(filter(None, [contact.get('negocios_email'), contact.get('infra_email')]))
         rows.append(dict(selecionado=False, polo=polo, para=contact.get('email', ''),
-                         cc=cc, cco='', assunto='', gestor=contact.get('gestor', ''),
+                         cc=cc, cco='', assunto=FAST_TRACK_SUBJECT + polo, pendencias=record['pendencias'],
+                         gestor=contact.get('gestor', ''),
                          academico_nome=contact.get('academico_nome', '')))
     return {'rows': rows, 'auditores': directory['auditores'],
             'html': render_fast_track(root).decode('utf-8')}
@@ -179,7 +188,7 @@ def build_fast_track_package(root, payload):
     source_rows = payload.get('rows')
     if not isinstance(source_rows, list) or not 1 <= len(source_rows) <= MAX_ROWS:
         raise ValueError('Revise entre 1 e 500 polos')
-    allowed = {key(row['polo']) for row in current['rows']}
+    allowed = {key(row['polo']): row for row in current['rows']}
     auditors = {auditor['nome']: auditor['email'] for auditor in current['auditores']}
     rows, seen = [], set()
     for row in source_rows:
@@ -189,13 +198,14 @@ def build_fast_track_package(root, payload):
             continue
         polo = key(text(row.get('polo', ''), 'Polo'))
         if polo not in allowed or polo in seen:
-            raise ValueError('Polo repetido ou fora da base de reprovados')
+            raise ValueError('Polo repetido ou fora da lista de checklists pendentes')
         seen.add(polo)
         academic = text(row.get('academico_nome', ''), 'Acadêmico')
         if academic not in auditors:
             raise ValueError('Complete a escolha do acadêmico cadastrado em cada polo selecionado')
         cc = addresses(row.get('cc', ''), 'CC')
-        rows.append(dict(row, polo=polo, cc=';'.join(filter(None, [cc, auditors[academic]]))))
+        subject = text(row.get('assunto', ''), 'Assunto do polo', 255) or allowed[polo]['assunto']
+        rows.append(dict(row, polo=polo, assunto=subject, cc=';'.join(filter(None, [cc, auditors[academic]]))))
     return build_package(dict(payload, html=current['html'], rows=rows), per_polo=True)
 
 

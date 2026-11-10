@@ -14,6 +14,9 @@ try {
   });
   await page.goto(base + '/fast-track-infra-2026/lote');
   assert.equal(await page.locator('#batch-load-fast-track').count(), 1, 'mapped batch loading exists');
+  assert.equal(await page.locator('#batch-load-fast-track').textContent(), 'Carregar polos com checklist pendente');
+  assert.ok((await page.locator('#batch-form').textContent()).includes('20/11/2026'));
+  assert.ok(!(await page.locator('#batch-form').textContent()).includes('31/08'));
   let releaseLoad, loaded;
   const gate = new Promise(resolve => { releaseLoad = resolve; });
   const waiting = new Promise(resolve => { loaded = resolve; });
@@ -30,6 +33,10 @@ try {
   await page.unroute('**/api/lote/fast-track');
   assert.equal(await page.locator('[data-row]').count(), 3);
   assert.equal(await page.locator('[data-field=selecionado]:checked').count(), 0);
+  assert.equal(await page.locator('#batch-subject').isDisabled(), true, 'mapped rows already have per-polo subjects');
+  const prefix = '[ PREENCHIMENTO OBRIGATÓRIO - CL INSUMOS e CL REVENUE SHARE] Novo prazo máximo para preenchimento - ';
+  assert.equal(await page.locator('[data-row="0"] [data-field=assunto]').inputValue(), prefix + 'Polo A');
+  assert.ok((await page.locator('[data-row="1"]').textContent()).includes('Checklist de laboratório e Checklist de infraestrutura'));
   assert.equal(await page.locator('#batch-html').getAttribute('required'), null);
   assert.equal(await page.locator('#batch-xlsx').getAttribute('required'), null);
   await page.locator('#batch-search').fill('Polo B');
@@ -38,7 +45,7 @@ try {
   assert.equal(await page.locator('[data-field=selecionado]:checked').count(), 1);
   const academic = page.locator('[data-row="1"] [data-field=academico_nome]');
   assert.equal(await academic.inputValue(), '');
-  await page.locator('#batch-subject').fill('Fast Track QA');
+
   await page.locator('#batch-approved').check();
   await page.locator('#batch-build').click();
   assert.equal(await academic.evaluate(element => element.validity.valueMissing), true, 'academic missing blocks download');

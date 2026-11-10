@@ -2,9 +2,9 @@
 
 ## O que esta função faz
 
-No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo do download do HTML, abre uma preparação separada. Clique em **Carregar polos reprovados**, revise os contatos, selecione os polos e baixe um ZIP único compatível com a ponte existente. Não é necessário carregar HTML ou planilha manualmente neste caminho.
+No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo do download do HTML, abre uma preparação separada. Clique em **Carregar polos com checklist pendente**, revise os contatos, selecione os polos e baixe um ZIP único compatível com a ponte existente. Não é necessário carregar HTML ou planilha manualmente neste caminho.
 
-**O site não envia emails.** A criação de rascunhos e o envio acontecem no computador do operador, pelo Outlook clássico. O corpo usa os bytes do modelo original, sem preenchimentos nem personalização, inclusive o prazo histórico **31/08**, mantido por decisão do usuário. Ainda é obrigatória a confirmação de revisão antes do download; essa decisão não torna o prazo vigente.
+**O site não envia emails.** A criação de rascunhos e o envio acontecem no computador do operador, pelo Outlook clássico. O corpo usa os bytes do modelo aprovado, sem preenchimentos nem personalização. O texto foi substituído pelo **Comunicado CLFT_13.11.pdf**, cujo prazo é **20/11/2026, sem prorrogações**, preservando a arte institucional anterior. A confirmação de revisão continua obrigatória antes do download.
 
 ## Requisitos
 
@@ -13,29 +13,38 @@ No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo 
 - Não é necessário instalar Python ou Excel no computador que apenas executa o pacote baixado.
 - Autorização e políticas da empresa continuam válidas. Se o script for bloqueado, peça apoio à TI; não desative proteções.
 
-## 1. Preparar o lote pelos polos reprovados
+## 1. Preparar o lote pelos checklists pendentes
 
 1. Abra a prévia **Agenda Fast Track Infra 2026** e clique em **DIsparo em lote**. A rota é `/fast-track-infra-2026/lote`.
-2. Clique em **Carregar polos reprovados**. A base `databases/acompamento/polos-irregulares-fasttrack.xlsx` é usada somente para identificar polos com **Reprovado** em pelo menos um dos dois laboratórios. Aprovados e status vazios não entram; linhas repetidas do mesmo polo geram uma única opção.
-3. Clique em **Conferir HTML do lote** e revise o modelo fixo, incluindo o prazo histórico 31/08. O corpo não recebe dados das planilhas nem campos manuais.
-4. Revise o **Assunto padrão**, inicialmente `AGENDA FAST TRACK INFRA 2026`. Pode ser substituído por assunto específico de cada linha.
+2. Clique em **Carregar polos com checklist pendente**. Entram os polos que satisfaçam **qualquer um** destes critérios independentes:
+   - `Data Checklist de Laboratório` vazia na primeira aba de `databases/acompamento/polos-irregulares-fasttrack.xlsx`;
+   - `DATA CL` vazia em `Planilha1` de `databases/acompamento/auditoria-infraestrutura-fasttrack.xlsx`.
+   Células nulas ou contendo apenas espaços são vazias; zero não é vazio, fórmulas/erros nas colunas de seleção são recusados. Abas `Comments` e `Planilha2` não participam. A união é pelo nome completo normalizado, sem duplicar o mesmo polo. O status Reprovado **não é mais critério de inclusão nem veto global**: um polo reprovado na primeira base ainda entra se satisfizer o critério da segunda.
+3. Clique em **Conferir HTML do lote** e revise o comunicado, incluindo o prazo 20/11/2026. O corpo não recebe dados das planilhas nem campos manuais. Os dois links úteis vieram do PDF e exigem login no PAD.
+4. Revise o **Assunto do polo**, preenchido automaticamente com o padrão abaixo e o nome completo do registro. Pode ser editado por linha. Se apagado, o servidor recompõe o padrão daquele polo; o campo de assunto padrão global é exclusivo da alternativa manual.
 5. Se desejar, informe a **Conta remetente do Outlook**. Ela precisa existir entre as contas configuradas no perfil. Vazio usa a primeira conta da sessão, cujo endereço será mostrado para confirmação no Windows.
 
 O mesmo corpo HTML será usado para todas as mensagens; não há personalização por polo. Assinaturas do Outlook, anexos, imagens locais e arquivos externos não são incorporados automaticamente. A prévia do navegador bloqueia recursos externos e não certifica a aparência no Outlook: confira com o teste isolado antes de operar.
 
+Padrão do assunto (o marcador final é substituído pelo nome do polo):
+
+```text
+[ PREENCHIMENTO OBRIGATÓRIO - CL INSUMOS e CL REVENUE SHARE] Novo prazo máximo para preenchimento - COLOCAR NOME DO POLO AQUI
+```
+
 ## 2. Selecionar e revisar os destinatários
 
-- Os contatos vêm exclusivamente de `databases/09-11-26/auditoria-base-gerencial.xlsx` e `auditoria-base-gerencial-contatos.xlsx`, incluindo a aba `AUDITORES`. Contatos escritos na base temporária Fast Track são ignorados.
+- Os contatos vêm exclusivamente de `databases/09-11-26/auditoria-base-gerencial.xlsx` e `auditoria-base-gerencial-contatos.xlsx`, incluindo a aba `AUDITORES`. Contatos escritos nas duas bases temporárias Fast Track são ignorados.
 - **Para** vem do gestor do polo; **CC** é preenchido com negócios e infraestrutura. O **acadêmico em CC** aparece em seletor separado, com nome e email, e é acrescentado ao CC final no pacote.
 - Se não houver vínculo acadêmico, escolha manualmente um cadastrado para aquele polo. A exportação é bloqueada se qualquer polo selecionado estiver sem acadêmico ou sem email válido em Para. A escolha vale só para esta preparação; não cria vínculo nem altera as bases.
 - Nenhum polo é selecionado automaticamente. Use a busca por polo/gestor, **Selecionar visíveis**, os checkboxes individuais ou **Limpar seleção inteira**. A busca não desmarca seleções fora do filtro: confira o contador total antes de baixar.
-- Uma mensagem por polo selecionado, mesmo se dois polos tiverem os mesmos destinatários. Não há agrupamento por gestor. Um polo repetido ou fora da lista de reprovados é recusado pelo servidor.
-- Para, CC, CCO e assuntos são revisáveis. Um polo não encontrado na gerencial continua visível para complemento manual. Desmarcar um polo remove suas exigências de preenchimento.
+- Uma mensagem por polo selecionado, mesmo se dois polos tiverem os mesmos destinatários. Não há agrupamento por gestor. Um polo repetido ou fora da união atual de pendências é recusado pelo servidor. Cada registro mostra qual checklist motivou sua inclusão.
+- Para, CC, CCO e assuntos são revisáveis. Um polo não encontrado na gerencial continua visível com contatos em branco para complemento manual. Registros de expansão sem identificação segura não são associados por semelhança de cidade, mesmo se o ID estiver ausente ou `#N/A`. Desmarcar um polo remove suas exigências de preenchimento.
 - Recarregar os polos descarta a revisão dos contatos. Saindo da página, as escolhas não são persistidas. Nenhum contato é enviado em parâmetros da URL.
 
 ### Alternativa manual anterior
 
-Continua disponível em **Alternativa manual: carregar HTML e planilha próprios**. Esse caminho substitui o cruzamento automático e mantém o contrato anterior; a seleção acadêmica por cadastro é exigida no caminho de polos reprovados, não no importador genérico.
+Continua disponível em **Alternativa manual: carregar HTML e planilha próprios**. Esse caminho substitui o cruzamento automático e mantém o contrato anterior; a seleção acadêmica por cadastro é exigida no caminho de checklists pendentes, não no importador genérico.
 
 Baixe **modelo de destinatários (.xlsx)**, preencha a aba `DESTINATARIOS` e importe o arquivo na página. Preserve estes cabeçalhos e sua ordem:
 

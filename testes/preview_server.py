@@ -16,7 +16,7 @@ FLOW_PAGES = {
     '/aulas-praticas': ('aulas-praticas', 'Agenda de Regularização da Auditoria Acadêmica', 'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA',
                       'Lê aulas previstas e comprovadas apenas de databases/09-11-26 e mantém o layout do email. Este teste não lê destinatários nem carrega funções de envio.'),
     '/fast-track-infra-2026': ('fast-track-infra-2026', 'Agenda Fast Track Infra 2026', 'AGENDA_FAST_TRACK_INFRA_2026',
-                             'Modelo fixo baseado no exemplo_email.pdf. Sem campos ou leitura das planilhas. Prazo 31/08 preservado do exemplo de 2026; não é um prazo atualizado.'),
+                             'Comunicado CLFT_13.11: prazo de 20/11/2026, sem prorrogações, conforme texto recebido. Arte institucional preservada. Corpo fixo, sem campos ou leitura das planilhas nesta prévia.'),
     '/auditoria-situacao-polos': ('auditoria-situacao-polos', 'Agenda de Auditoria e Situação de Regularização dos Polos',
                                 'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
                                 'Reutiliza as bases locais e permite completar ou revisar os dados antes de gerar. 262 e 26.2 são o mesmo semestre; o semestre das fontes continua identificado na prévia.'),
@@ -112,7 +112,7 @@ def make_server(root, port=8876):
                 try:
                     self.json_reply(200, fast_track_batch(root))
                 except Exception:
-                    self.json_reply(503, {'error': 'Não foi possível carregar os reprovados. Confira a base Fast Track, a gerencial e os cadastros de contatos.'})
+                    self.json_reply(503, {'error': 'Não foi possível carregar as pendências. Confira as duas bases Fast Track em acompanhamento, a gerencial e os cadastros de contatos.'})
                 return
             if path == '/fast-track-infra-2026/lote':
                 self.reply(200, (web / 'lote.html').read_bytes(), 'text/html; charset=utf-8')

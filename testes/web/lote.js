@@ -15,6 +15,7 @@
     const pending = fixedBatch ? rows.filter(row => row.selecionado && (!row.para.trim() || !row.academico_nome)).length : 0;
     $('batch-count').textContent = `${count} mensagem(ns) selecionada(s) de ${rows.length} linha(s).${pending ? ` ${pending} polo(s) selecionado(s) com gestor ou acadêmico pendente.` : ''}`;
     $('batch-selection').hidden = !rows.length;
+    $('batch-subject').disabled = fixedBatch;
     build.disabled = busy || !html || !count;
     $('batch-preview-button').disabled = !html;
   }
@@ -58,6 +59,9 @@
         const source = document.createElement('p'); source.className = 'hint';
         source.textContent = row.gestor ? `Gestor na gerencial: ${row.gestor}` : 'Gestor não localizado: complete Para manualmente.';
         fieldset.append(source);
+        const reason = document.createElement('p'); reason.className = 'hint';
+        reason.textContent = `Pendência: ${row.pendencias.join(' e ')}.`;
+        fieldset.append(reason);
       }
       const selection = document.createElement('input');
       selection.type = 'checkbox'; selection.checked = row.selecionado; selection.dataset.field = 'selecionado';
@@ -71,6 +75,7 @@
         input.type = 'text'; input.maxLength = key === 'assunto' ? 255 : 2000;
         input.required = key === 'para' && row.selecionado;
         label.htmlFor = input.id; label.textContent = fixedBatch && key === 'cc' ? 'CC — negócios e infraestrutura (editável)' : title;
+        if (fixedBatch && key === 'assunto') label.textContent = 'Assunto do polo (preenchido automaticamente, revisável)';
         input.addEventListener('input', () => { row[key] = input.value; });
         group.append(label, input); fields.append(group);
       }
@@ -115,16 +120,15 @@
     const sheet = ++sheetVersion, content = ++htmlVersion;
     fixedBatch = true; html = ''; rows = []; auditors = [];
     preview.removeAttribute('src'); $('batch-search').value = '';
-    invalidate(); drawRows(); message('Cruzando os polos reprovados com os cadastros de contato…');
+    invalidate(); drawRows(); message('Cruzando os polos com checklist pendente com os cadastros de contato…');
     try {
       const response = await fetch('/api/lote/fast-track');
       const data = await response.json();
       if (sheet !== sheetVersion || content !== htmlVersion) return;
-      if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os reprovados');
+      if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as pendências');
       html = data.html; rows = data.rows; auditors = data.auditores;
-      if (!$('batch-subject').value.trim()) $('batch-subject').value = 'AGENDA FAST TRACK INFRA 2026';
       invalidate(); drawRows();
-      message('Reprovados carregados, sem seleção automática. Revise os contatos, complete o acadêmico quando faltar e confira o modelo com prazo histórico 31/08.');
+      message('Pendências carregadas, sem seleção automática. Revise contatos e assuntos por polo, complete o acadêmico quando faltar e confira o comunicado com prazo de 20/11/2026.');
     } catch (error) {
       if (sheet === sheetVersion && content === htmlVersion) message(error.message, true);
     }

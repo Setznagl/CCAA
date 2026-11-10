@@ -52,17 +52,17 @@ Ausência de linha na timeline não comprova ausência de auditoria. Contagens a
 
 ### Agenda Fast Track Infra 2026
 
-O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/modelo_email.html`. Não lê planilhas, não converte PDF em runtime e não possui campos. Preserva imagens incorporadas, texto e prazo **histórico 31/08** da referência; não inclui metadados Outlook/destinatários da impressão. O nome antigo da pasta continua aceito para o modelo estático.
+O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/modelo_email.html`. Não lê planilhas, não converte PDF em runtime e não possui campos. O texto atual é o **Comunicado CLFT_13.11.pdf**, com prazo **20/11/2026, sem prorrogações**; imagens incorporadas, fontes, cores e estrutura institucional foram preservadas. Rodapés editoriais do PDF não fazem parte do corpo. O nome antigo da pasta continua aceito para o modelo estático.
 
 #### DIsparo em lote — ponte para Outlook clássico
 
 Guia do operador: [CCAA — instruções de disparo em lote](../docs/CCAA-disparo-em-lote-outlook.md).
 
-O botão abaixo do download abre `/fast-track-infra-2026/lote`, uma preparação separada da prévia estática. O modelo e a prévia original continuam intactos e sem leitura de planilhas. Nesta página:
+O botão abaixo do download abre `/fast-track-infra-2026/lote`, uma preparação separada da prévia estática. O corpo revisado é o mesmo em todas as mensagens; a prévia isolada continua sem leitura de planilhas. Nesta página:
 
-1. Clique em **Carregar polos reprovados**. `databases/acompamento/polos-irregulares-fasttrack.xlsx` mapeia os polos com pelo menos um laboratório Reprovado; seus contatos temporários são ignorados. O corpo é o modelo Fast Track byte-intacto, incluindo o prazo histórico 31/08, sem inputs de conteúdo.
+1. Clique em **Carregar polos com checklist pendente**. Inclui a união dos polos com `Data Checklist de Laboratório` vazia em `databases/acompamento/polos-irregulares-fasttrack.xlsx` e `DATA CL` vazia em `databases/acompamento/auditoria-infraestrutura-fasttrack.xlsx`. Basta um critério, sem veto por status da outra base. Somente nulo/espaços são vazios; não zero, fórmula ou erro. Abas auxiliares são ignoradas. Uma opção por nome completo normalizado, com os motivos visíveis. O corpo é o modelo atual byte-intacto com prazo 20/11/2026, sem inputs de conteúdo.
 2. Para vem do gestor na gerencial; CC é negócios/infra dos cadastros de `databases/09-11-26`, mais o acadêmico em seletor separado. Se faltar vínculo acadêmico, escolha manualmente um cadastrado na aba AUDITORES por polo selecionado. Sem escolha ou Para válido, não exporta. Não cria vínculos nem persiste alterações.
-3. Busque por polo/gestor, selecione os polos e revise Para, CC, CCO e assuntos. **Selecionar visíveis** respeita o filtro; seleções anteriores fora dele permanecem. Uma mensagem por polo, sem agrupamento por gestor. Nenhum polo começa selecionado. Assunto vazio usa o padrão. Conta remetente vazia usa a conta padrão do Outlook; conta explícita precisa estar configurada nele. A alternativa manual de HTML/DESTINATARIOS permanece disponível em bloco separado.
+3. Busque por polo/gestor, selecione os polos e revise Para, CC, CCO e assuntos. **Selecionar visíveis** respeita o filtro; seleções anteriores fora dele permanecem. Uma mensagem por polo, sem agrupamento por gestor. Nenhum polo começa selecionado. Assunto automático: `[ PREENCHIMENTO OBRIGATÓRIO - CL INSUMOS e CL REVENUE SHARE] Novo prazo máximo para preenchimento - <nome do polo>`, revisável por linha; vazio recompõe esse padrão. Registros de expansão sem identificação segura ficam com contatos em branco, sem associação por cidade. Conta remetente vazia usa a conta padrão do Outlook; conta explícita precisa estar configurada nele. A alternativa manual de HTML/DESTINATARIOS permanece disponível em bloco separado.
 4. Confira a prévia isolada e confirme a revisão de conteúdo, prazo e destinatários. Baixe o ZIP.
 5. No Windows com **Outlook clássico configurado**, extraia o ZIP e abra `abrir.cmd`. A ponte oferece rascunhos por padrão, teste isolado (sem CC/CCO do lote) e envio com confirmação própria. Leia `LEIA-ME.txt` antes de operar. Não há envio pelo servidor.
 

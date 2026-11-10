@@ -32,7 +32,7 @@ Portanto, disponibilidade para Aulas/consolidado não demonstrou equivalência i
 
 - **Aulas:** portar o renderer para código próprio, usando `auditoria-apps-prazo.xlsx` e `auditoria-timeline-262.xlsx`, sem dependência do disparador legado.
 - **Consolidado:** migrar carteira, práticas, agenda, pareceres e indicador para as novas planilhas; Checklist CL 2026 e itens sem fonte continuam manuais. Vereditos não substituem checklist.
-- **Fast Track:** permanece HTML estático; não usa planilhas e conserva o prazo histórico 31/08.
+- **Fast Track — histórico desta comparação:** HTML estático com prazo31/08. **Revisão posterior CLFT_13.11:** corpo substituído pelo comunicado de prazo20/11/2026, preservando a arte; lote separado seleciona datas de checklist vazias em duas bases. Regras atuais em `CCAA-disparo-em-lote-outlook.md`.
 
 ## Evidências da reconferência
 
