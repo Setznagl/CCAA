@@ -63,7 +63,7 @@ SENHA = "SUA_SENHA_AQUI"                                        # só com --smtp
 SERVIDOR_SMTP = "smtp.office365.com"
 PORTA_SMTP = 587
 
-TITULO = "REGULARIZACAO_AUDITORIA_ACADEMICA"
+TITULO = "AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA"
 SUBTITULO = ""
 
 # E-mail dos auditores → entra em cópia (CC) em todos os disparos

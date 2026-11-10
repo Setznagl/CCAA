@@ -62,7 +62,7 @@ class PreviewServerTests(unittest.TestCase):
             with urlopen(base + route, timeout=30) as response:
                 html = response.read()
                 self.assertIn('sandbox', response.headers['Content-Security-Policy'])
-            expected = render_aulas(load_aulas(ROOT / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA')['11815820']).encode()
+            expected = render_aulas(load_aulas(ROOT / 'fluxos/AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA')['11815820']).encode()
             self.assertEqual(html, expected)
             with urlopen(base + route + '&download=1', timeout=30) as response:
                 self.assertEqual(response.read(), html)
@@ -80,7 +80,7 @@ class PreviewServerTests(unittest.TestCase):
         try:
             base = f'http://127.0.0.1:{server.server_port}'
             cases = [
-                (Request(base + '/fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA/emails.xlsx'), 404),
+                (Request(base + '/fluxos/AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA/emails.xlsx'), 404),
                 (Request(base + '/api/send', method='POST', data=b''), 405),
                 (Request(base + '/api/options/aulas-praticas', headers={'Host': 'evil.invalid'}), 403),
                 (Request(base + '/mari', headers={'Sec-Fetch-Site': 'cross-site'}), 403),
