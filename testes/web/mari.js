@@ -42,7 +42,7 @@ if (document.body.dataset.flow === 'mari') {
   const listing = node('div'); listing.id = 'mari-rows';
   const reviewed = input('mari-reviewed', 'Confirmo GO, email, grupos e linhas/período selecionados', 'checkbox'); reviewed.required = true;
   editor.append(count, listing, caption('Confirmo GO, email, grupos e linhas/período selecionados', reviewed), reviewed);
-  form.append(warnings, editor, generate);
+  (document.querySelector('#step-editor') || form).append(warnings, editor);
   function updateSelection() {
     const selected = rows.filter(row => row.selected.checked);
     count.textContent = `${new Set(selected.map(row => row.source.polo)).size} polo(s) distinto(s); ${selected.length} linha(s) de laboratório selecionada(s).`;
@@ -87,6 +87,7 @@ if (document.body.dataset.flow === 'mari') {
       populate(data.draft);
       warnings.textContent = [`Origem: databases/09-11-26; semestre(s) da fonte: ${(data.source_cycles || []).join(', ') || 'não informado'}.`, ...(data.warnings || [])].join('\n');
       ready = true; editor.disabled = false; $('reference-date').disabled = false;
+      window.CCAASteps?.show?.(2);
       message('Revise as linhas e complete os campos pendentes antes de confirmar e gerar.');
     } catch (error) {
       if (current === version) message(error.message, true);

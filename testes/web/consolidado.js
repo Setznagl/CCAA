@@ -51,7 +51,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
   const warnings = node('p'); warnings.id = 'source-warnings'; warnings.setAttribute('role', 'note');
   const editor = node('fieldset'); editor.id = 'consolidado-editor'; editor.disabled = true;
   editor.append(node('legend', 'Dados do consolidado'));
-  form.append(warnings, editor, generate);
+  (document.querySelector('#step-editor') || form).append(warnings, editor);
   for (const [key, label, type] of scalars) {
     const control = input(key, label, type, ''); control.id = key;
     control.required = key === 'gestor' || key === 'ciclo';
@@ -119,6 +119,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
       }
       warnings.textContent = [`Origem das bases: ${(data.source_cycles || []).join(', ') || 'não informada'}. Alterar o ciclo não atualiza a fonte.`, ...(data.warnings || [])].join('\n');
       ready = true; editor.disabled = false;
+      window.CCAASteps?.show?.(2);
       message('Dados carregados. Revise a carteira e preencha as lacunas antes de gerar.');
     } catch (error) {
       if (current === version) message(error.message, true);

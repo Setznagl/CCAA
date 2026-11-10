@@ -112,7 +112,14 @@ def make_server(root, port=8876):
                     body = body.replace('__' + key + '__', value)
                 self.reply(200, body, 'text/html; charset=utf-8')
                 return
-            if path in {'/app.js', '/app.css', '/consolidado.js', '/mari.js', '/aulas.js'}:
+            if path.startswith('/fonts/') and path.endswith('.woff2'):
+                target = web / 'fonts' / Path(path).name
+                if target.is_file() and target.parent == (web / 'fonts'):
+                    self.reply(200, target.read_bytes(), 'font/woff2')
+                else:
+                    self.reply(404)
+                return
+            if path in {'/app.js', '/app.css', '/steps.js', '/consolidado.js', '/mari.js', '/aulas.js'}:
                 kind = 'text/javascript' if path.endswith('.js') else 'text/css'
                 self.reply(200, (web / path[1:]).read_bytes(), kind + '; charset=utf-8')
                 return

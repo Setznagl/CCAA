@@ -15,7 +15,7 @@ if (document.body.dataset.flow === 'aulas-praticas') {
   editor.append(node('legend', 'Revisar dados do polo'),
     node('p', 'Complete as lacunas antes de gerar. Prazos são manuais e começam vazios. Ausência não é zero nem ausência de auditoria. Não há gravação nas bases ou no navegador.'));
   const warnings = node('p'); warnings.id = 'source-warnings'; warnings.setAttribute('role', 'note');
-  form.append(warnings, editor, generate);
+  (document.querySelector('#step-editor') || form).append(warnings, editor);
   function control(id, label, type = 'text', parent = editor) {
     const input = node('input'); input.id = id; input.type = type; input.required = true; input.maxLength = 300;
     if (type === 'number') { input.min = '0'; input.step = '1'; }
@@ -65,6 +65,7 @@ if (document.body.dataset.flow === 'aulas-praticas') {
       applicable.checked = data.draft.praticas_aplicaveis; labStatus.value = data.draft.labs_status; reviewed.checked = false;
       labs = []; listing.replaceChildren(); for (const lab of data.draft.labs_lista) addLab(lab);
       warnings.textContent = (data.warnings || []).join('\n'); ready = true; editor.disabled = false; update();
+      window.CCAASteps?.show?.(2);
       message('Revise os dados e preencha os suplementos antes de confirmar e gerar.');
     } catch (error) { if (current === version) message(error.message, true); }
     finally { if (current === version) generate.disabled = !ready; }
