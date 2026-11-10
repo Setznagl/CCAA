@@ -1,5 +1,6 @@
 """Regressões pequenas da integração gerencial, sem bases pessoais."""
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
@@ -163,6 +164,37 @@ class GerencialTests(unittest.TestCase):
             self.assertTrue(all(not row[2] for row in values[1:]))
         finally:
             book.close()
+
+    def test_consolidado_dates_use_actual_then_scheduled_with_provenance(self):
+        book = load_workbook(self.data / 'auditoria-timeline-262.xlsx')
+        sheet = book.active
+        sheet.delete_rows(2, sheet.max_row)
+        scheduled = datetime(2026, 11, 6, 14)
+        actual = datetime(2026, 11, 7, 10)
+        cases = [
+            ('Realizada', scheduled, actual, 'Sim', 'Não', '', '2026-11-07', 'Realizada'),
+            ('Reprovada com realização', scheduled, actual, 'Sim', 'Não', 'Reprovado',
+             '2026-11-07', 'Realizada'),
+            ('Reprovada', scheduled, None, 'Sim', 'Não', 'Reprovado', '2026-11-06',
+             'Realizada (data agendada como referência)'),
+            ('Finalizada', scheduled, None, 'Sim', 'Sim', 'Aprovado', '2026-11-06',
+             'Finalizada (data agendada como referência)'),
+            ('Agendada', scheduled, None, 'Não', 'Não', '', '2026-11-06', 'Agendada'),
+            ('Sem agendamento', None, None, 'Não', 'Não', '', '', 'Agendada'),
+            ('Realizada sem nenhuma data', None, None, 'Sim', 'Não', 'Reprovado', '', 'Realizada'),
+        ]
+        for label, agenda, done, performed, finalized, result, _, _ in cases:
+            sheet.append(['Polo A', label, agenda, '262', 'Regular', 'Auditor do lab',
+                          'Sim', performed, done, finalized, result])
+        book.save(self.data / 'auditoria-timeline-262.xlsx')
+        book.close()
+        record = next(r for r in load_consolidado(self.root).values() if r['draft']['gestor'])
+        agenda = {r['ambiente']: r for r in record['draft']['agenda']}
+        for label, _, _, _, _, _, expected_date, expected_status in cases:
+            with self.subTest(case=label):
+                self.assertEqual(agenda[label]['data'], expected_date)
+                self.assertEqual(agenda[label]['status'], expected_status)
+        self.assertEqual(record['draft']['prazo_auditorias'], '')
 
     def test_editing_a_source_contact_does_not_detach_it_from_its_polo(self):
         server = make_server(self.root, 0)

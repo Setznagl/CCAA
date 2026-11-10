@@ -58,6 +58,7 @@ O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/mod
 
 - Carteira: gestor do polo da gerencial; somente polos presentes em timeline, apps ou acompanhamento. Agrupa por nome + conjunto de emails, sem fundir homônimos ou nomes diferentes por um email compartilhado. Polos sem associação completa continuam no preenchimento manual.
 - Práticas: apps-prazo. Agenda/pareceres: timeline. Indicador Rep. Sem Retorno: acompanhamento, somente com cobertura completa e fonte única por polo.
+- Datas da agenda: realizadas/finalizadas priorizam `Data realização`; quando ausente, usam `Data agendada` com a indicação **data agendada como referência** no status do formulário e do email. Agendadas usam a data agendada; sem nenhuma data disponível, o campo fica vazio. Data de referência não comprova realização nem preenche os prazos manuais. Ao alterar uma data manualmente, revise também o status.
 - Checklist CL2026 e prazos sem fonte permanecem manuais. Contatos de apoio são preenchidos pelas bases e pelas escolhas acadêmicas; suplementos manuais do corpo são preservados. Vereditos e acadêmicos de cópia não são checklist. Carteira e linhas carregadas podem ser revisadas sem alterar as fontes.
 - 262 e 26.2 são sinônimos. Ciclo ausente fica desconhecido; mudar o título não atualiza a origem. Rodapés EN/PT são metadados, não polos.
 - Alterar a carteira limpa o indicador agregado para revisão. Totais de práticas são recalculados sem converter ausências em zero. Avisos de polos sem associação ficam na revisão manual, não em carteiras alheias.

@@ -59,7 +59,7 @@ if (document.body.dataset.flow === 'auditoria-situacao-polos') {
     const caption = node('label', label); caption.htmlFor = key;
     inputs[key] = control; editor.append(caption, control);
   }
-  editor.append(node('p', 'Campos vazios significam não informado. Ao remover ou renomear um polo, linhas de dados que não pertençam à carteira serão omitidas da geração. Não há gravação nas bases.'));
+  editor.append(node('p', 'Campos vazios significam não informado. A agenda prioriza a data de realização; na ausência, usa a data agendada e identifica essa referência no status. Isso não comprova a data de realização. Ao revisar uma data manualmente, revise também seu status. Ao remover ou renomear um polo, linhas de dados que não pertençam à carteira serão omitidas da geração. Não há gravação nas bases.'));
   const bodies = {};
   for (const [section, [title, columns]] of Object.entries(sections)) {
     rows[section] = [];

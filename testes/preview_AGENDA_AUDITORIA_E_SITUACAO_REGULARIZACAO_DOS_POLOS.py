@@ -209,7 +209,12 @@ def load_consolidado(root: Path) -> dict:
                 performed = _flag(row['Realizada']) == 'SIM'
                 status = 'Finalizada' if _flag(row['Finalizada']) == 'SIM' else 'Realizada' if performed else 'Agendada' if _flag(row['Agendada']) == 'SIM' else ''
                 try:
-                    when = _source_date(row['Data realização'] if performed else row['Data agendada'])
+                    completed = performed or status == 'Finalizada'
+                    when = _source_date(row['Data realização'] if completed else row['Data agendada'])
+                    if not when and completed:
+                        when = _source_date(row['Data agendada'])
+                        if when:
+                            status += ' (data agendada como referência)'
                 except (ValueError, TypeError):
                     when = ''
                     record_warnings.append(f'{polo}: data da timeline inválida; complete manualmente.')

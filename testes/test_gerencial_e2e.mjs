@@ -30,7 +30,7 @@ try {
         if (flow === 'mari' && candidate.polo_count > 1 && data.draft.destinatarios.some(r => !r.academico_nome)) {
           chosen = {candidate, data}; break;
         }
-        if (flow === 'aulas-praticas' || (flow === 'auditoria-situacao-polos' && candidate.polo_count <= 3)) {
+        if (flow === 'aulas-praticas' || (flow === 'auditoria-situacao-polos' && candidate.polo_count <= 3 && data.draft.agenda.some(r => r.status.includes('data agendada como referência')))) {
           chosen = {candidate, data}; break;
         }
       }
@@ -43,6 +43,12 @@ try {
         assert.ok((await page.locator('#mari-go').inputValue()).length);
         assert.ok(await page.locator('[data-field=grupo]').evaluateAll(fields => fields.every(f => f.value)));
         assert.equal(await page.locator('[data-field=date]').count(), chosen.data.draft.rows.length);
+      }
+      if (flow === 'auditoria-situacao-polos') {
+        assert.deepEqual(await page.locator('[data-section=agenda][data-field=data]').evaluateAll(fields => fields.map(f => f.value)),
+          chosen.data.draft.agenda.map(row => row.data), 'source dates reach native date inputs');
+        assert.deepEqual(await page.locator('[data-section=agenda][data-field=status]').evaluateAll(fields => fields.map(f => f.value)),
+          chosen.data.draft.agenda.map(row => row.status), 'date provenance reaches the form');
       }
       const missingAcademics = page.locator('#recipient-review select');
       const count = await missingAcademics.count();
@@ -96,6 +102,11 @@ try {
     const response = await responsePromise;
     const html = await response.text();
     assert.equal(response.status(), 200, html);
+    if (flow === 'auditoria-situacao-polos') {
+      const reference = chosen.data.draft.agenda.find(row => row.status.includes('data agendada como referência'));
+      assert.ok(reference.data, 'reference date is filled');
+      assert.ok(html.includes(reference.data) && html.includes(reference.status), 'date and provenance reach the generated email');
+    }
     await page.waitForFunction(() => document.querySelector('#download').getAttribute('aria-disabled') === 'false');
     if (!fixed) {
       const payload = response.request().postDataJSON();
