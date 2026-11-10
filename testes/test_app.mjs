@@ -6,11 +6,12 @@ import test from 'node:test';
 const source = await readFile(new URL('./web/app.js', import.meta.url), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-async function setup() {
+async function setup(flow = 'mari') {
   const nodes = new Map();
   const pending = [];
   const blobs = [];
   const revoked = [];
+  const requests = [];
   function element() {
     return {
       value: '', textContent: '', disabled: false, dataset: {}, attrs: {}, listeners: {},
@@ -24,10 +25,11 @@ async function setup() {
   for (const id of ['form', 'record', 'reference-date', 'generate', 'status', 'download', 'preview', 'result-label', 'record-label', 'date-control']) nodes.set(`#${id}`, element());
   const window = element();
   vm.runInNewContext(source, {
-    document: {body: {dataset: {flow: 'mari'}}, querySelector: id => nodes.get(id), querySelectorAll: () => []},
+    document: {body: {dataset: {flow}}, querySelector: id => nodes.get(id), querySelectorAll: () => []},
     window, Option: function () {}, URLSearchParams, Blob,
     URL: {createObjectURL(blob) { blobs.push(blob); return `blob:${blobs.length}`; }, revokeObjectURL(url) { revoked.push(url); }},
     fetch(url) {
+      requests.push(url);
       if (url.startsWith('/api/options/')) return Promise.resolve({ok: true, json: async () => ({options: [{id: 'A', label: 'Registro A', polo_count: 1}], today: '2026-09-11'})});
       return new Promise((resolve, reject) => pending.push({url, resolve, reject}));
     },
@@ -36,7 +38,7 @@ async function setup() {
   const get = id => nodes.get(`#${id}`);
   get('record').value = 'A';
   return {
-    get, pending, blobs, revoked, window,
+    get, pending, blobs, revoked, window, requests,
     submit: () => get('form').listeners.submit({preventDefault() {}}),
     change(id, value) {
       get(id).value = value;
@@ -46,6 +48,27 @@ async function setup() {
   };
 }
 const success = html => ({ok: true, text: async () => html});
+
+test('consolidado is owned by its dedicated script without legacy listeners or requests', async () => {
+  const app = await setup('auditoria-situacao-polos');
+  assert.deepEqual(app.requests, []);
+  assert.deepEqual(app.get('form').listeners, {});
+});
+
+test('static Fast Track generates without reading controls or requesting data options', async () => {
+  const app = await setup('fast-track-infra-2026');
+  assert.deepEqual(app.requests, []);
+  for (const id of ['record', 'reference-date']) {
+    Object.defineProperty(app.get(id), 'value', {get() { throw new Error('Static preview must not read fields'); }});
+  }
+  const request = app.submit();
+  assert.equal(app.pending[0].url, '/api/render/fast-track-infra-2026?');
+  app.pending[0].resolve(success('<html>Fast Track</html>'));
+  await request;
+  assert.equal(app.get('result-label').textContent, 'Agenda Fast Track Infra 2026');
+  assert.equal(app.get('download').attrs['aria-disabled'], 'false');
+  assert.equal(await app.blobs[0].text(), '<html>Fast Track</html>');
+});
 
 for (const [field, value] of [['record', 'B'], ['reference-date', '2026-09-12']]) {
   test(`${field}: change during request keeps stale response from enabling download`, async () => {

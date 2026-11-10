@@ -1,5 +1,7 @@
 'use strict';
+if (document.body.dataset.flow !== 'auditoria-situacao-polos') {
 const flow = document.body.dataset.flow;
+const staticPreview = flow === 'fast-track-infra-2026';
 const form = document.querySelector('#form');
 const record = document.querySelector('#record');
 const referenceDate = document.querySelector('#reference-date');
@@ -38,6 +40,11 @@ document.querySelector('#record-label').textContent = flow === 'mari' ? 'Gerente
 document.querySelector('#date-control').hidden = flow !== 'mari';
 
 async function load() {
+  if (staticPreview) {
+    generate.disabled = false;
+    message('Modelo estático pronto. Gere o HTML sem preencher campos; nenhuma planilha será lida.');
+    return;
+  }
   try {
     const response = await fetch(`/api/options/${flow}`, {cache: 'no-store'});
     const data = await response.json();
@@ -66,13 +73,13 @@ form.addEventListener('submit', async event => {
   if (!form.reportValidity()) return;
   invalidate();
   const requestGeneration = generation;
-  const id = record.value;
-  const date = referenceDate.value;
-  const label = record.selectedOptions[0].textContent;
+  const id = staticPreview ? 'modelo' : record.value;
+  const date = staticPreview ? '' : referenceDate.value;
+  const label = staticPreview ? 'Agenda Fast Track Infra 2026' : record.selectedOptions[0].textContent;
   generate.disabled = true;
   message('Gerando HTML com os dados selecionados…');
   try {
-    const parameters = new URLSearchParams({id, date});
+    const parameters = new URLSearchParams(staticPreview ? {} : {id, date});
     const response = await fetch(`/api/render/${flow}?${parameters}`, {cache: 'no-store'});
     if (!response.ok) {
       const data = await response.json();
@@ -96,3 +103,4 @@ form.addEventListener('submit', async event => {
 });
 window.addEventListener('pagehide', invalidate);
 load();
+}

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PreviewServerTests(unittest.TestCase):
-    def test_two_test_pages_have_generation_controls(self):
+    def test_four_test_pages_follow_current_flow_names(self):
         try:
             server_module = importlib.import_module('preview_server')
         except ModuleNotFoundError:
@@ -19,12 +19,23 @@ class PreviewServerTests(unittest.TestCase):
         worker.start()
         try:
             base = f'http://127.0.0.1:{server.server_port}'
-            for route, heading in [('/mari', 'Auditoria Mari'), ('/aulas-praticas', 'Aulas práticas')]:
+            names = {
+                '/mari': 'Agenda Semanal de Auditorias',
+                '/aulas-praticas': 'Agenda de Regularização da Auditoria Acadêmica',
+                '/fast-track-infra-2026': 'Agenda Fast Track Infra 2026',
+                '/auditoria-situacao-polos': 'Agenda de Auditoria e Situação de Regularização dos Polos',
+            }
+            for route, heading in names.items():
                 with self.subTest(route=route):
                     with urlopen(base + route, timeout=10) as response:
                         html = response.read().decode()
                         self.assertEqual(response.status, 200)
-                        self.assertIn(heading, html)
+                        self.assertIn('<title>CCAA — ' + heading + '</title>', html)
+                        self.assertIn('<h1 id="page-title">' + heading + '</h1>', html)
+                        for label in names.values():
+                            self.assertIn('>' + label + '</a>', html)
+                        if route == '/aulas-praticas':
+                            self.assertIn('<code>AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA</code>', html)
                         self.assertIn('id="generate"', html)
                         self.assertIn('id="preview"', html)
                         self.assertIn('sandbox', html)

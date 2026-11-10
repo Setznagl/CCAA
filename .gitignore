@@ -1,5 +1,6 @@
 # Dados e fontes recebidas: manter somente na máquina local
 /references/
+/rev/
 /testes/evidence/
 
 # Ambientes, caches e segredos

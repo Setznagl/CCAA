@@ -1,26 +1,40 @@
 """Local, read-only HTML preview server. No mail transport is loaded."""
 import argparse
+from collections import OrderedDict
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import threading
 from urllib.parse import parse_qs, urlsplit
+import uuid
 
 FLOW_PAGES = {
-    '/mari': ('mari', 'Auditoria Mari', 'AGENDA_SEMANAL_AUDITORIAS',
+    '/mari': ('mari', 'Agenda Semanal de Auditorias', 'AGENDA_SEMANAL_AUDITORIAS',
               'Reprodução isolada do HTML de Mari; não executa VBA ou Excel.'),
-    '/aulas-praticas': ('aulas-praticas', 'Aulas práticas', 'REGULARIZACAO_AUDITORIA_ACADEMICA',
+    '/aulas-praticas': ('aulas-praticas', 'Agenda de Regularização da Auditoria Acadêmica', 'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA',
                       'Reutiliza as funções de dados e HTML do Python atual. Este teste do corpo não lê destinatários nem carrega funções de envio.'),
+    '/fast-track-infra-2026': ('fast-track-infra-2026', 'Agenda Fast Track Infra 2026', 'AGENDA_FAST_TRACK_INFRA_2026',
+                             'Modelo fixo baseado no exemplo_email.pdf. Sem campos ou leitura das planilhas. Prazo 31/08 preservado do exemplo de 2026; não é um prazo atualizado.'),
+    '/auditoria-situacao-polos': ('auditoria-situacao-polos', 'Agenda de Auditoria e Situação de Regularização dos Polos',
+                                'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
+                                'Reutiliza as bases locais e permite completar ou revisar os dados antes de gerar. 262 e 26.2 são o mesmo semestre; o semestre das fontes continua identificado na prévia.'),
 }
 HTML_POLICY = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; sandbox"
 PAGE_POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'self'"
+
+
+def source_file(root, folder, legacy, filename):
+    """Accept the renamed flow and preserved pre-pull sources."""
+    paths = [Path(root) / 'fluxos' / name / filename for name in (folder, legacy)]
+    return next((path for path in paths if path.is_file()), paths[0])
 
 
 def make_server(root, port=8876):
     root = Path(root).resolve()
     web = Path(__file__).resolve().parent / 'web'
     cache = {}
+    snapshots = OrderedDict()
     lock = threading.Lock()
 
     def models(flow):
@@ -31,13 +45,18 @@ def make_server(root, port=8876):
                     cache[flow] = load_mari(root / 'fluxos/AGENDA_SEMANAL_AUDITORIAS')
                 elif flow == 'aulas-praticas':
                     from preview_aulas import load_aulas
-                    cache[flow] = load_aulas(root / 'fluxos/REGULARIZACAO_AUDITORIA_ACADEMICA')
+                    source = source_file(root, 'AGENDA_REGULARIZACAO_AUDITORIA_ACADEMICA',
+                                         'REGULARIZACAO_AUDITORIA_ACADEMICA', 'disparar_emails.py')
+                    cache[flow] = load_aulas(source.parent)
+                elif flow == 'auditoria-situacao-polos':
+                    from preview_consolidado import load_consolidado
+                    cache[flow] = load_consolidado(root)
                 else:
                     raise ValueError('Frente desconhecida')
             return cache[flow]
 
     class Handler(BaseHTTPRequestHandler):
-        def reply(self, status, body=b'', kind='text/plain; charset=utf-8', policy=PAGE_POLICY, download=None):
+        def reply(self, status, body=b'', kind='text/plain; charset=utf-8', policy=PAGE_POLICY, download=None, headers=None):
             if isinstance(body, str):
                 body = body.encode('utf-8')
             self.send_response(status)
@@ -49,16 +68,26 @@ def make_server(root, port=8876):
             self.send_header('Referrer-Policy', 'no-referrer')
             if download:
                 self.send_header('Content-Disposition', f'attachment; filename="{download}"')
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
             self.end_headers()
             self.wfile.write(body)
 
         def json_reply(self, status, data):
             self.reply(status, json.dumps(data, ensure_ascii=False), 'application/json; charset=utf-8')
 
-        def do_GET(self):
+        def local_request(self):
             allowed = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
-            if self.headers.get('Host') not in allowed or self.headers.get('Sec-Fetch-Site') == 'cross-site':
+            origin = self.headers.get('Origin')
+            if (self.headers.get('Host') not in allowed
+                    or self.headers.get('Sec-Fetch-Site') == 'cross-site'
+                    or (origin and origin not in {'http://' + host for host in allowed})):
                 self.json_reply(403, {'error': 'Acesso permitido apenas pelo endereço local deste teste'})
+                return False
+            return True
+
+        def do_GET(self):
+            if not self.local_request():
                 return
             target = urlsplit(self.path)
             path = target.path
@@ -73,23 +102,49 @@ def make_server(root, port=8876):
                 return
             if path in FLOW_PAGES:
                 flow, heading, folder, note = FLOW_PAGES[path]
+                static = flow == 'fast-track-infra-2026'
                 body = (web / 'page.html').read_text(encoding='utf-8')
-                for key, value in {'FLOW': flow, 'HEADING': heading, 'FOLDER': folder, 'NOTE': note}.items():
+                for key, value in {'FLOW': flow, 'HEADING': heading, 'FOLDER': folder, 'NOTE': note,
+                                   'RECORD_STATE': 'hidden disabled' if static else '',
+                                   'GENERATE_STATE': '' if static else 'disabled',
+                                   'INITIAL_STATUS': 'Modelo estático pronto para gerar.' if static else 'Lendo as bases recebidas…',
+                                   'EXTRA_SCRIPT': '<script src="/consolidado.js" defer></script>' if flow == 'auditoria-situacao-polos' else ''}.items():
                     body = body.replace('__' + key + '__', value)
                 self.reply(200, body, 'text/html; charset=utf-8')
                 return
-            if path in {'/app.js', '/app.css'}:
+            if path in {'/app.js', '/app.css', '/consolidado.js'}:
                 kind = 'text/javascript' if path.endswith('.js') else 'text/css'
                 self.reply(200, (web / path[1:]).read_bytes(), kind + '; charset=utf-8')
                 return
             try:
                 pieces = path.strip('/').split('/')
-                if len(pieces) != 3 or pieces[0] != 'api' or pieces[1] not in {'options', 'render'}:
+                if len(pieces) == 3 and pieces[:2] == ['api', 'preview']:
+                    with lock:
+                        snapshot = snapshots.get(pieces[2])
+                    if snapshot is None:
+                        self.json_reply(404, {'error': 'Prévia expirada ou inexistente. Gere o HTML novamente.'})
+                        return
+                    html, filename = snapshot
+                    args = parse_qs(target.query, max_num_fields=4)
+                    self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY,
+                               filename if args.get('download') == ['1'] else None)
+                    return
+                if len(pieces) != 3 or pieces[0] != 'api' or pieces[1] not in {'options', 'render', 'draft'}:
                     self.json_reply(404, {'error': 'Página não encontrada'})
                     return
                 action, flow = pieces[1:]
-                if flow not in {'mari', 'aulas-praticas'}:
+                if flow not in {page[0] for page in FLOW_PAGES.values()}:
                     self.json_reply(404, {'error': 'Frente não encontrada'})
+                    return
+                if flow == 'fast-track-infra-2026':
+                    if action != 'render':
+                        self.json_reply(404, {'error': 'Este modelo estático não usa seleção de registros'})
+                        return
+                    args = parse_qs(target.query, max_num_fields=4)
+                    html = source_file(root, 'AGENDA_FAST_TRACK_INFRA_2026',
+                                       'FAST_TRACK_INFRA_2026', 'modelo_email.html').read_text(encoding='utf-8')
+                    filename = 'ccaa-fast-track-infra-2026.html' if args.get('download') == ['1'] else None
+                    self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY, filename)
                     return
                 records = models(flow)
                 if action == 'options':
@@ -102,6 +157,16 @@ def make_server(root, port=8876):
                 identity = args.get('id', [''])[0]
                 if len(identity) > 100 or identity not in records:
                     self.json_reply(404, {'error': 'Selecione um registro disponível nas bases'})
+                    return
+                if action == 'draft':
+                    if flow != 'auditoria-situacao-polos':
+                        self.json_reply(404, {'error': 'Esta frente não possui formulário complementar'})
+                        return
+                    record = records[identity]
+                    self.json_reply(200, {key: record[key] for key in ('draft', 'warnings', 'source_cycles')})
+                    return
+                if flow == 'auditoria-situacao-polos':
+                    self.json_reply(405, {'error': 'Use o formulário para gerar esta prévia com POST'})
                     return
                 today = date.fromisoformat(args.get('date', [date.today().isoformat()])[0])
                 if flow == 'mari':
@@ -118,7 +183,53 @@ def make_server(root, port=8876):
                 self.json_reply(503, {'error': 'Não foi possível ler as bases ou gerar o HTML: ' + str(exc)})
 
         def do_POST(self):
-            self.json_reply(405, {'error': 'Este ambiente só permite leitura e geração de HTML'})
+            if not self.local_request():
+                return
+            if urlsplit(self.path).path != '/api/render/auditoria-situacao-polos':
+                self.json_reply(405, {'error': 'Este ambiente só permite leitura e geração de HTML'})
+                return
+            if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
+                self.json_reply(415, {'error': 'Envie os campos como JSON'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if length <= 0:
+                    raise ValueError('Formulário vazio')
+                if length > 1024 * 1024:
+                    self.json_reply(413, {'error': 'Formulário excede o limite de 1 MiB'})
+                    return
+                payload = json.loads(self.rfile.read(length).decode('utf-8'))
+                if not isinstance(payload, dict) or not isinstance(payload.get('id'), str) or not isinstance(payload.get('draft'), dict):
+                    raise ValueError('Selecione um gestor e preencha um formulário válido')
+                records = models('auditoria-situacao-polos')
+                identity = payload['id']
+                if len(identity) > 100 or identity not in records:
+                    self.json_reply(404, {'error': 'Selecione um gestor disponível ou o preenchimento manual'})
+                    return
+                record = records[identity]
+                selected = payload['draft'].get('polos', [])
+                if not isinstance(selected, list) or any(not isinstance(polo, str) for polo in selected):
+                    raise ValueError('polos: informe uma lista de nomes de polos')
+                removed = set(record['draft']['polos']) - set(selected)
+                warnings = [warning for warning in record['warnings']
+                            if not any(warning.startswith(polo + ':') for polo in removed)]
+                from preview_consolidado import render_consolidado
+                sample = source_file(root, 'AGENDA_AUDITORIA_E_SITUACAO_REGULARIZACAO_DOS_POLOS',
+                                     'SITUACAO_REGULARIZACAO_DOS_POLOS', 'sample.html')
+                html = render_consolidado(payload['draft'], sample,
+                                          source_cycles=record['source_cycles'], warnings=warnings)
+                token = uuid.uuid4().hex
+                filename = 'ccaa-auditoria-situacao-polos.html'
+                with lock:
+                    snapshots[token] = (html, filename)
+                    while len(snapshots) > 16:
+                        snapshots.popitem(last=False)
+                self.reply(200, html, 'text/html; charset=utf-8', HTML_POLICY,
+                           headers={'X-Preview-URL': '/api/preview/' + token})
+            except (ValueError, UnicodeDecodeError) as exc:
+                self.json_reply(400, {'error': str(exc)})
+            except Exception as exc:
+                self.json_reply(503, {'error': 'Não foi possível ler as bases ou gerar o HTML: ' + str(exc)})
 
         def log_message(self, *args):
             pass
