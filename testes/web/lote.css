@@ -5,5 +5,8 @@
 .batch-check input { width: 24px; min-width: 24px; min-height: 24px; }
 .batch-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
 .batch-fields input { min-width: 0; }
+.batch-fields select { min-width: 0; max-width: 100%; }
+#batch-manual { margin-top: 1rem; }
+#batch-manual summary { cursor: pointer; }
 #batch-form input[type=file] { max-width: 100%; }
 @media (max-width: 800px) { .batch-fields { grid-template-columns: 1fr; } }

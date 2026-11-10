@@ -16,6 +16,49 @@ COLUMNS = ['Enviar', 'Polo', 'Para', 'CC', 'CCO', 'Assunto']
 MAX_ROWS = 500
 
 
+def fast_track_batch(root):
+    from gerencial import key, load_directory, person
+    from preview_AGENDA_FAST_TRACK_INFRA_2026 import render_fast_track
+
+    root = Path(root)
+    directory = load_directory(root / 'databases/09-11-26')
+    book = load_workbook(root / 'databases/acompamento/polos-irregulares-fasttrack.xlsx',
+                         read_only=True, data_only=False, keep_links=False)
+    try:
+        sheet = book.worksheets[0]
+        values = sheet.iter_rows()
+        headers = [cell.value for cell in next(values)]
+        required = ['NOME UNIDADE SISTEMA (time infra)', 'Status Lab. Multidisciplinar',
+                    'Status Laboratório de Enfermagem']
+        if not set(required).issubset(headers):
+            raise ValueError('Fast Track: colunas de polo e status obrigatórias ausentes')
+        columns = [headers.index(header) for header in required]
+        failed = {}
+        for cells in values:
+            selected = [cells[index] for index in columns]
+            if any(cell.data_type == 'f' for cell in selected):
+                raise ValueError('Fast Track: use valores, não fórmulas, nas colunas de polo e status')
+            polo, *statuses = [cell.value for cell in selected]
+            identity = key(polo)
+            if not person(polo) or identity.startswith(('FILTROS APLICADOS:', 'APPLIED FILTERS:')):
+                continue
+            if any(key(status) == 'REPROVADO' for status in statuses):
+                failed.setdefault(identity, str(polo).strip())
+    finally:
+        book.close()
+    if not failed or len(failed) > MAX_ROWS:
+        raise ValueError('Fast Track: esperado entre 1 e 500 polos reprovados')
+    rows = []
+    for identity, polo in sorted(failed.items()):
+        contact = directory['polos'].get(identity, {})
+        cc = ';'.join(filter(None, [contact.get('negocios_email'), contact.get('infra_email')]))
+        rows.append(dict(selecionado=False, polo=polo, para=contact.get('email', ''),
+                         cc=cc, cco='', assunto='', gestor=contact.get('gestor', ''),
+                         academico_nome=contact.get('academico_nome', '')))
+    return {'rows': rows, 'auditores': directory['auditores'],
+            'html': render_fast_track(root).decode('utf-8')}
+
+
 def spreadsheet_template():
     book = Workbook()
     sheet = book.active
@@ -127,7 +170,36 @@ def digest(value):
                                      separators=(',', ':')).encode('utf-8')).hexdigest()
 
 
-def build_package(payload):
+def build_fast_track_package(root, payload):
+    from gerencial import key
+
+    current = fast_track_batch(root)
+    if payload.get('html') != current['html']:
+        raise ValueError('O modelo fixo mudou ou foi alterado. Recarregue os polos e revise novamente.')
+    source_rows = payload.get('rows')
+    if not isinstance(source_rows, list) or not 1 <= len(source_rows) <= MAX_ROWS:
+        raise ValueError('Revise entre 1 e 500 polos')
+    allowed = {key(row['polo']) for row in current['rows']}
+    auditors = {auditor['nome']: auditor['email'] for auditor in current['auditores']}
+    rows, seen = [], set()
+    for row in source_rows:
+        if not isinstance(row, dict) or type(row.get('selecionado')) is not bool:
+            raise ValueError('Polo: seleção inválida')
+        if not row['selecionado']:
+            continue
+        polo = key(text(row.get('polo', ''), 'Polo'))
+        if polo not in allowed or polo in seen:
+            raise ValueError('Polo repetido ou fora da base de reprovados')
+        seen.add(polo)
+        academic = text(row.get('academico_nome', ''), 'Acadêmico')
+        if academic not in auditors:
+            raise ValueError('Complete a escolha do acadêmico cadastrado em cada polo selecionado')
+        cc = addresses(row.get('cc', ''), 'CC')
+        rows.append(dict(row, polo=polo, cc=';'.join(filter(None, [cc, auditors[academic]]))))
+    return build_package(dict(payload, html=current['html'], rows=rows), per_polo=True)
+
+
+def build_package(payload, per_polo=False):
     if payload.get('aprovado') is not True:
         raise ValueError('Confirme a revisão do conteúdo, prazo e destinatários')
     html = approved_html(payload)
@@ -149,7 +221,10 @@ def build_package(payload):
         row['assunto'] = text(source.get('assunto', ''), f'Linha {index} — assunto', 255) or default_subject
         if not row['assunto']:
             raise ValueError(f'Linha {index}: informe o assunto ou o assunto padrão')
-        identity = digest({key: value.lower() if key != 'assunto' else value for key, value in row.items()})
+        identity_fields = {key: value.lower() if key != 'assunto' else value for key, value in row.items()}
+        if per_polo:
+            identity_fields['polo'] = source['polo']
+        identity = digest(identity_fields)
         if identity in ids:
             raise ValueError(f'Linha {index}: mensagem duplicada; desmarque a repetição')
         ids.add(identity)

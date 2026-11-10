@@ -18,24 +18,36 @@
     <section class="controls" aria-labelledby="page-title">
       <p>Fluxo: <code>AGENDA_FAST_TRACK_INFRA_2026</code></p>
       <h1 id="page-title">DIsparo em lote</h1>
-      <p class="note">Carregue o HTML aprovado e sua planilha. Revise a seleção e baixe o pacote para o Outlook clássico. A prévia de exemplo e suas bases não são alteradas.</p>
-      <p id="status" role="status" aria-live="polite">Nenhum arquivo carregado. Até 500 mensagens por lote.</p>
-      <form id="batch-form" autocomplete="off">
-        <h2>1 · Conteúdo aprovado</h2>
+      <p class="note">Carregue os polos reprovados, revise os contatos e baixe um ZIP único. Uma mensagem por polo, com o mesmo modelo Fast Track, sem alterar seu conteúdo.</p>
+      <p id="status" role="status" aria-live="polite">Carregue os reprovados para começar. Até 500 mensagens por lote.</p>
+      <form id="batch-form" autocomplete="off" novalidate>
+        <h2>1 · Carregar lote Fast Track</h2>
+        <button id="batch-load-fast-track" type="button">Carregar polos reprovados</button>
+        <p class="hint">A base temporária polos-irregulares-fasttrack identifica os polos com Reprovado em pelo menos um laboratório. Contatos vêm somente da gerencial e dos cadastros em databases/09-11-26. O modelo permanece intacto, inclusive o prazo histórico 31/08.</p>
+        <details id="batch-manual">
+        <summary>Alternativa manual: carregar HTML e planilha próprios</summary>
         <label for="batch-html">Arquivo HTML aprovado (.html, UTF-8, até 1 MiB)</label>
-        <input id="batch-html" type="file" accept=".html,.htm,text/html" required>
+        <input id="batch-html" type="file" accept=".html,.htm,text/html">
+        <a class="download" href="/api/lote/modelo.xlsx" download>Baixar modelo de destinatários (.xlsx)</a>
+        <label for="batch-xlsx">Planilha de destinatários (.xlsx, até 1 MiB)</label>
+        <input id="batch-xlsx" type="file" accept=".xlsx">
+        <p class="hint">Use a aba DESTINATARIOS. Enviar = SIM ou X pré-seleciona; vazio não seleciona. Esta alternativa substitui o cruzamento automático; revise todas as cópias. Uma linha = uma mensagem.</p>
+        </details>
         <p class="hint">O mesmo HTML será usado em todas as mensagens, sem personalização. Não carregue o exemplo com prazo histórico sem aprová-lo. Imagens locais, anexos e assinatura do Outlook não são incorporados automaticamente; confira a aparência no teste pelo Outlook.</p>
-        <button id="batch-preview-button" type="button" disabled>Conferir HTML carregado</button>
+        <button id="batch-preview-button" type="button" disabled>Conferir HTML do lote</button>
         <label for="batch-subject">Assunto padrão (usado quando a linha não tem assunto)</label>
         <input id="batch-subject" type="text" maxlength="255">
         <label for="batch-sender">Conta remetente do Outlook (opcional)</label>
         <input id="batch-sender" type="email" maxlength="254" placeholder="Vazio: conta padrão do Outlook">
         <p class="hint">Se informado, deve corresponder a uma conta já configurada no Outlook clássico. Não configura permissão de enviar como caixa compartilhada.</p>
         <h2>2 · Destinatários e cópias</h2>
-        <a class="download" href="/api/lote/modelo.xlsx" download>Baixar modelo de destinatários (.xlsx)</a>
-        <label for="batch-xlsx">Planilha de destinatários (.xlsx, até 1 MiB)</label>
-        <input id="batch-xlsx" type="file" accept=".xlsx" required>
-        <p class="hint">Use a aba DESTINATARIOS do modelo. Enviar = SIM ou X pré-seleciona a linha; vazio não seleciona. Uma linha selecionada = uma mensagem, sem agrupamento automático. Separe emails com ponto e vírgula (;).</p>
+        <p class="hint">Para = gestor do polo. CC = negócios e infraestrutura, mais o acadêmico escolhido separadamente. Complete as lacunas dos polos selecionados; desmarcar um polo remove suas exigências. Separe emails com ponto e vírgula (;). Nenhuma revisão altera as bases.</p>
+        <div id="batch-selection" hidden>
+          <label for="batch-search">Buscar polo ou gestor</label>
+          <input id="batch-search" type="search" placeholder="Nome do polo ou gestor">
+          <button id="batch-select-visible" type="button">Selecionar visíveis</button>
+          <button id="batch-clear-selection" type="button">Limpar seleção inteira</button>
+        </div>
         <p id="batch-count" role="status">0 mensagens selecionadas.</p>
         <div id="batch-rows"></div>
         <h2>3 · Revisar e baixar</h2>

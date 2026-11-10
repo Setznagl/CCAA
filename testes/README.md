@@ -58,15 +58,15 @@ O módulo de mesmo nome lê os bytes de `fluxos/AGENDA_FAST_TRACK_INFRA_2026/mod
 
 Guia do operador: [CCAA — instruções de disparo em lote](../docs/CCAA-disparo-em-lote-outlook.md).
 
-O botão abaixo do download abre `/fast-track-infra-2026/lote`, uma preparação separada da prévia de exemplo. Não lê as bases Fast Track nem altera o modelo. Nesta página:
+O botão abaixo do download abre `/fast-track-infra-2026/lote`, uma preparação separada da prévia estática. O modelo e a prévia original continuam intactos e sem leitura de planilhas. Nesta página:
 
-1. Carregue seu HTML **aprovado em UTF-8**; o mesmo corpo vai para todas as mensagens, sem personalização ou assinatura automática.
-2. Baixe o modelo `.xlsx`, preencha a aba `DESTINATARIOS` e importe. Colunas: **Enviar, Polo, Para, CC, CCO, Assunto**. SIM/X pré-seleciona; vazio/NAO não seleciona. Não use fórmulas.
-3. Revise cada linha e cópia na tela. Uma linha selecionada corresponde a uma mensagem, sem agrupamento por polo/gestor. Assunto vazio usa o assunto padrão. Conta remetente vazia usa a conta padrão do Outlook; conta explícita precisa estar configurada nele.
+1. Clique em **Carregar polos reprovados**. `databases/acompamento/polos-irregulares-fasttrack.xlsx` mapeia os polos com pelo menos um laboratório Reprovado; seus contatos temporários são ignorados. O corpo é o modelo Fast Track byte-intacto, incluindo o prazo histórico 31/08, sem inputs de conteúdo.
+2. Para vem do gestor na gerencial; CC é negócios/infra dos cadastros de `databases/09-11-26`, mais o acadêmico em seletor separado. Se faltar vínculo acadêmico, escolha manualmente um cadastrado na aba AUDITORES por polo selecionado. Sem escolha ou Para válido, não exporta. Não cria vínculos nem persiste alterações.
+3. Busque por polo/gestor, selecione os polos e revise Para, CC, CCO e assuntos. **Selecionar visíveis** respeita o filtro; seleções anteriores fora dele permanecem. Uma mensagem por polo, sem agrupamento por gestor. Nenhum polo começa selecionado. Assunto vazio usa o padrão. Conta remetente vazia usa a conta padrão do Outlook; conta explícita precisa estar configurada nele. A alternativa manual de HTML/DESTINATARIOS permanece disponível em bloco separado.
 4. Confira a prévia isolada e confirme a revisão de conteúdo, prazo e destinatários. Baixe o ZIP.
 5. No Windows com **Outlook clássico configurado**, extraia o ZIP e abra `abrir.cmd`. A ponte oferece rascunhos por padrão, teste isolado (sem CC/CCO do lote) e envio com confirmação própria. Leia `LEIA-ME.txt` antes de operar. Não há envio pelo servidor.
 
-Limites: 500 linhas, 1 MiB por HTML/planilha e 4 MiB por requisição de lote. Endereços devem ser explícitos, separados por `;`; nomes do catálogo Outlook não são resolvidos automaticamente. Mensagens duplicadas idênticas no lote são rejeitadas. Imagens locais, anexos e assinaturas não são empacotados automaticamente. Verifique a renderização por teste no Outlook.
+Limites: 500 linhas, 1 MiB por HTML/planilha e 4 MiB por requisição de lote. Endereços devem ser explícitos, separados por `;`; nomes do catálogo Outlook não são resolvidos automaticamente. No lote mapeado, polos repetidos são rejeitados; polos diferentes com contatos iguais permanecem mensagens separadas. No importador manual, mensagens duplicadas idênticas continuam rejeitadas. Imagens locais, anexos e assinaturas não são empacotados automaticamente. Verifique a renderização por teste no Outlook.
 
 O ZIP contém dados pessoais: proteja o download. A página não grava uploads nas bases, no disco do servidor ou no localStorage; as últimas 16 prévias compartilhadas ficam em memória. O histórico da ponte é **local ao Windows**, separado das fontes e preservado entre downloads do mesmo lote. Ele reduz reenvio acidental, mas não comprova entrega nem substitui a conferência no Outlook. Mudar conteúdo, destinatários ou remetente gera outro lote. Não apague o histórico para contornar uma falha incerta. Se a política corporativa bloquear scripts, solicite liberação à TI, sem alterar a política pelo pacote.
 

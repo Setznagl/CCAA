@@ -2,9 +2,9 @@
 
 ## O que esta função faz
 
-No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo do download do HTML de exemplo, abre uma preparação separada. Você carrega um HTML aprovado e uma planilha própria, revisa os destinatários e baixa um pacote ZIP.
+No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo do download do HTML, abre uma preparação separada. Clique em **Carregar polos reprovados**, revise os contatos, selecione os polos e baixe um ZIP único compatível com a ponte existente. Não é necessário carregar HTML ou planilha manualmente neste caminho.
 
-**O site não envia emails.** A criação de rascunhos e o envio acontecem no computador do operador, pelo Outlook clássico. A prévia estática original continua intacta, com seu prazo histórico **31/08**: esse exemplo não é um comunicado automaticamente aprovado ou atualizado.
+**O site não envia emails.** A criação de rascunhos e o envio acontecem no computador do operador, pelo Outlook clássico. O corpo usa os bytes do modelo original, sem preenchimentos nem personalização, inclusive o prazo histórico **31/08**, mantido por decisão do usuário. Ainda é obrigatória a confirmação de revisão antes do download; essa decisão não torna o prazo vigente.
 
 ## Requisitos
 
@@ -13,17 +13,29 @@ No fluxo **AGENDA_FAST_TRACK_INFRA_2026**, o botão **DIsparo em lote**, abaixo 
 - Não é necessário instalar Python ou Excel no computador que apenas executa o pacote baixado.
 - Autorização e políticas da empresa continuam válidas. Se o script for bloqueado, peça apoio à TI; não desative proteções.
 
-## 1. Preparar o conteúdo
+## 1. Preparar o lote pelos polos reprovados
 
 1. Abra a prévia **Agenda Fast Track Infra 2026** e clique em **DIsparo em lote**. A rota é `/fast-track-infra-2026/lote`.
-2. Em **Arquivo HTML aprovado**, selecione um `.html` em UTF-8, de até **1 MiB**.
-3. Clique em **Conferir HTML carregado** e revise texto, datas e prazos.
-4. Preencha o **Assunto padrão**, caso as linhas da planilha não tenham assunto próprio.
+2. Clique em **Carregar polos reprovados**. A base `databases/acompamento/polos-irregulares-fasttrack.xlsx` é usada somente para identificar polos com **Reprovado** em pelo menos um dos dois laboratórios. Aprovados e status vazios não entram; linhas repetidas do mesmo polo geram uma única opção.
+3. Clique em **Conferir HTML do lote** e revise o modelo fixo, incluindo o prazo histórico 31/08. O corpo não recebe dados das planilhas nem campos manuais.
+4. Revise o **Assunto padrão**, inicialmente `AGENDA FAST TRACK INFRA 2026`. Pode ser substituído por assunto específico de cada linha.
 5. Se desejar, informe a **Conta remetente do Outlook**. Ela precisa existir entre as contas configuradas no perfil. Vazio usa a primeira conta da sessão, cujo endereço será mostrado para confirmação no Windows.
 
 O mesmo corpo HTML será usado para todas as mensagens; não há personalização por polo. Assinaturas do Outlook, anexos, imagens locais e arquivos externos não são incorporados automaticamente. A prévia do navegador bloqueia recursos externos e não certifica a aparência no Outlook: confira com o teste isolado antes de operar.
 
-## 2. Preparar e revisar os destinatários
+## 2. Selecionar e revisar os destinatários
+
+- Os contatos vêm exclusivamente de `databases/09-11-26/auditoria-base-gerencial.xlsx` e `auditoria-base-gerencial-contatos.xlsx`, incluindo a aba `AUDITORES`. Contatos escritos na base temporária Fast Track são ignorados.
+- **Para** vem do gestor do polo; **CC** é preenchido com negócios e infraestrutura. O **acadêmico em CC** aparece em seletor separado, com nome e email, e é acrescentado ao CC final no pacote.
+- Se não houver vínculo acadêmico, escolha manualmente um cadastrado para aquele polo. A exportação é bloqueada se qualquer polo selecionado estiver sem acadêmico ou sem email válido em Para. A escolha vale só para esta preparação; não cria vínculo nem altera as bases.
+- Nenhum polo é selecionado automaticamente. Use a busca por polo/gestor, **Selecionar visíveis**, os checkboxes individuais ou **Limpar seleção inteira**. A busca não desmarca seleções fora do filtro: confira o contador total antes de baixar.
+- Uma mensagem por polo selecionado, mesmo se dois polos tiverem os mesmos destinatários. Não há agrupamento por gestor. Um polo repetido ou fora da lista de reprovados é recusado pelo servidor.
+- Para, CC, CCO e assuntos são revisáveis. Um polo não encontrado na gerencial continua visível para complemento manual. Desmarcar um polo remove suas exigências de preenchimento.
+- Recarregar os polos descarta a revisão dos contatos. Saindo da página, as escolhas não são persistidas. Nenhum contato é enviado em parâmetros da URL.
+
+### Alternativa manual anterior
+
+Continua disponível em **Alternativa manual: carregar HTML e planilha próprios**. Esse caminho substitui o cruzamento automático e mantém o contrato anterior; a seleção acadêmica por cadastro é exigida no caminho de polos reprovados, não no importador genérico.
 
 Baixe **modelo de destinatários (.xlsx)**, preencha a aba `DESTINATARIOS` e importe o arquivo na página. Preserve estes cabeçalhos e sua ordem:
 
@@ -38,7 +50,7 @@ Baixe **modelo de destinatários (.xlsx)**, preencha a aba `DESTINATARIOS` e imp
 
 - Separe múltiplos emails com **`;`**. Use apenas os endereços, sem nomes entre `< >` ou nomes do catálogo.
 - Não use fórmulas. Limites: **500 linhas** e **1 MiB** para a planilha.
-- Uma linha selecionada equivale a **uma mensagem**. Não há agrupamento automático por gestor ou polo; mensagens idênticas repetidas são rejeitadas.
+- Na alternativa manual, uma linha selecionada equivale a **uma mensagem**, sem agrupamento automático; mensagens idênticas repetidas são rejeitadas.
 - Depois da importação, revise os campos **Para, CC, CCO e Assunto**, que podem ser editados na tela, e marque/desmarque as mensagens desejadas.
 - Os dados não são gravados nas bases ou no navegador. Saindo da página, será necessário carregar novamente os arquivos.
 

@@ -107,6 +107,13 @@ def make_server(root, port=8876):
                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                            download='destinatarios-fast-track.xlsx')
                 return
+            if path == '/api/lote/fast-track':
+                from lote import fast_track_batch
+                try:
+                    self.json_reply(200, fast_track_batch(root))
+                except Exception:
+                    self.json_reply(503, {'error': 'Não foi possível carregar os reprovados. Confira a base Fast Track, a gerencial e os cadastros de contatos.'})
+                return
             if path == '/fast-track-infra-2026/lote':
                 self.reply(200, (web / 'lote.html').read_bytes(), 'text/html; charset=utf-8')
                 return
@@ -218,7 +225,7 @@ def make_server(root, port=8876):
             if not self.local_request():
                 return
             path = urlsplit(self.path).path
-            if path in {'/api/lote/importar', '/api/lote/preview', '/api/lote/pacote'}:
+            if path in {'/api/lote/importar', '/api/lote/preview', '/api/lote/pacote', '/api/lote/fast-track/pacote'}:
                 if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
                     self.json_reply(415, {'error': 'Envie os campos como JSON'})
                     return
@@ -233,6 +240,9 @@ def make_server(root, port=8876):
                     from lote import approved_html, build_package, import_spreadsheet
                     if path == '/api/lote/importar':
                         self.json_reply(200, {'rows': import_spreadsheet(payload.get('xlsx'))})
+                    elif path == '/api/lote/fast-track/pacote':
+                        from lote import build_fast_track_package
+                        self.reply(200, build_fast_track_package(root, payload), 'application/zip', download='ccaa-fast-track-lote.zip')
                     elif path == '/api/lote/pacote':
                         self.reply(200, build_package(payload), 'application/zip', download='ccaa-fast-track-lote.zip')
                     else:
