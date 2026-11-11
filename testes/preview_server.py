@@ -4,6 +4,7 @@ from collections import OrderedDict
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import threading
 from urllib.parse import parse_qs, urlsplit
@@ -33,6 +34,16 @@ def source_file(root, folder, legacy, filename):
 
 def make_server(root, port=8876):
     root = Path(root).resolve()
+    host = os.environ.get('CCAA_HOST', '127.0.0.1')
+    public_url, auth_file = os.environ.get('CCAA_PUBLIC_URL', ''), os.environ.get('CCAA_AUTH_FILE', '')
+    hosted = None
+    if public_url or auth_file:
+        if not public_url or not auth_file:
+            raise ValueError('CCAA_PUBLIC_URL e CCAA_AUTH_FILE são obrigatórios no modo hospedado')
+        from hosted import HostedAccess
+        hosted = HostedAccess(public_url, auth_file)
+    elif host not in {'127.0.0.1', 'localhost'}:
+        raise ValueError('Escuta externa exige HTTPS e autenticação no modo hospedado')
     web = Path(__file__).resolve().parent / 'web'
     cache = {}
     snapshots = OrderedDict()
@@ -57,6 +68,10 @@ def make_server(root, port=8876):
             return cache[flow]
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(30)
+
         def reply(self, status, body=b'', kind='text/plain; charset=utf-8', policy=PAGE_POLICY, download=None, headers=None):
             if isinstance(body, str):
                 body = body.encode('utf-8')
@@ -78,6 +93,8 @@ def make_server(root, port=8876):
             self.reply(status, json.dumps(data, ensure_ascii=False), 'application/json; charset=utf-8')
 
         def local_request(self):
+            if hosted:
+                return hosted.authorize(self)
             allowed = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
             origin = self.headers.get('Origin')
             if (self.headers.get('Host') not in allowed
@@ -100,6 +117,9 @@ def make_server(root, port=8876):
                 return
             if path == '/favicon.ico':
                 self.reply(204)
+                return
+            if hosted and path == '/healthz':
+                self.json_reply(200, {'status': 'ok'})
                 return
             if path == '/api/lote/modelo.xlsx':
                 from lote import spreadsheet_template
@@ -351,12 +371,12 @@ def make_server(root, port=8876):
         def log_message(self, *args):
             pass
 
-    return ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    return ThreadingHTTPServer((host, port), Handler)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--port', type=int, default=8876)
+    parser.add_argument('--port', type=int, default=int(os.environ.get('CCAA_PORT', '8876')))
     args = parser.parse_args()
     try:
         server = make_server(Path(__file__).resolve().parents[1], args.port)

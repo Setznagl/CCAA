@@ -4,6 +4,7 @@
 /testes/evidence/
 
 # Ambientes, caches e segredos
+/runtime/
 .venv/
 venv/
 __pycache__/

@@ -1,0 +1,40 @@
+# Build e execução pelo on.sh; o Traefik existente termina o HTTPS.
+services:
+  ccaa:
+    image: ccaa:local
+    init: true
+    restart: unless-stopped
+    user: "${CCAA_UID:-1000}:${CCAA_GID:-1000}"
+    network_mode: host
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    environment:
+      CCAA_HOST: 0.0.0.0
+      CCAA_PORT: "${CCAA_PORT:-8876}"
+      CCAA_PUBLIC_URL: "https://${COMPOSE_PROJECT_NAME:-ccaa}.${TRAEFIK_HOST:?Defina TRAEFIK_HOST no .env}"
+      CCAA_AUTH_FILE: /run/secrets/ccaa-auth.json
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ccaa}.rule=Host(`${COMPOSE_PROJECT_NAME:-ccaa}.${TRAEFIK_HOST:?Defina TRAEFIK_HOST no .env}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ccaa}.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ccaa}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ccaa}.service=${COMPOSE_PROJECT_NAME:-ccaa}"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ccaa}.loadbalancer.server.port=${CCAA_PORT:-8876}"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ccaa}.middlewares=${COMPOSE_PROJECT_NAME:-ccaa}-limit"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME:-ccaa}-limit.ratelimit.average=20"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME:-ccaa}-limit.ratelimit.burst=40"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME:-ccaa}-limit.ratelimit.period=1s"
+    volumes:
+      - ./databases:/app/databases
+      - type: bind
+        source: ./runtime/auth.json
+        target: /run/secrets/ccaa-auth.json
+        read_only: true
+        bind:
+          create_host_path: false
+    stop_grace_period: 30s

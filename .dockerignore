@@ -1,0 +1,23 @@
+# Allowlist: bases, anexos, credenciais e evidências nunca entram no contexto.
+**
+!Dockerfile
+!testes/
+!testes/requirements.txt
+!testes/preview_server.py
+!testes/gerencial.py
+!testes/lote.py
+!testes/hosted.py
+!testes/preview_AGENDA_*.py
+!testes/web/
+!testes/web/**
+!testes/templates/
+!testes/templates/**
+!testes/lote_outlook/
+!testes/lote_outlook/executar.ps1
+!testes/lote_outlook/abrir.cmd
+!testes/lote_outlook/LEIA-ME.txt
+!fluxos/
+!fluxos/AGENDA_FAST_TRACK_INFRA_2026/
+!fluxos/AGENDA_FAST_TRACK_INFRA_2026/modelo_email.html
+**/__pycache__
+**/*.py[cod]

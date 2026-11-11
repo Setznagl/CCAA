@@ -33,6 +33,17 @@ Abra `http://127.0.0.1:8876/` e navegue pelo menu. O servidor anuncia um único 
 
 O serviço escuta somente em loopback. Não publique a porta com bases pessoais. Se o navegador estiver em outra máquina, use apenas encaminhamento autorizado.
 
+## Hospedagem opcional (Traefik/HTTPS)
+
+Padrão do LIRA adaptado ao servidor Python existente: `Dockerfile` (imagem `ccaa:local`, usuário não-root, healthcheck `/healthz`), `docker-compose.yml` (host networking, raiz somente-leitura, labels do Traefik com rate limit, credencial montada read-only) e `on.sh` (build → stop → init de credencial → up; nunca sobrescreve credencial existente).
+
+```sh
+cp .env.example .env   # ajuste TRAEFIK_HOST/CCAA_UID/CCAA_GID no servidor
+./on.sh                # gera runtime/acesso.txt na 1ª execução (leia com sudo, não publique)
+```
+
+No modo hospedado (`CCAA_PUBLIC_URL` + `CCAA_AUTH_FILE`), todo conteúdo exige login HTTP Basic (scrypt) e Host/Origin exatos do domínio configurado; sem essas variáveis o servidor continua local em loopback, inalterado. A porta interna continua exposta na rede do host — o HTTPS e o rate limit são do Traefik, mantenha a porta bloqueada externamente.
+
 ## Fontes vigentes
 
 As prévias com dados usam **somente `databases/09-11-26/`**:
