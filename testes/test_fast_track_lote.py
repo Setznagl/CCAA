@@ -123,8 +123,8 @@ class FastTrackBatchTests(unittest.TestCase):
             self.assertEqual(archive.read('lote.json'), original_manifest, 'blank subject falls back to per-polo pattern, not global subject')
         self.assertEqual(self.request(path, payload)[0], 400, 'cannot replace approved fixed template')
         payload['html'] = data['html']
-        payload['rows'][1]['polo'] = 'Polo aprovado'
-        self.assertEqual(self.request(path, payload)[0], 400, 'cannot include polo outside eligible source')
+        payload['rows'][1]['polo'] = ''
+        self.assertEqual(self.request(path, payload)[0], 400, 'empty polo name is invalid')
         payload['rows'][1]['polo'] = 'Polo A'
         self.assertEqual(self.request(path, payload)[0], 400, 'cannot repeat a polo')
         payload['rows'][1]['polo'] = 'Polo B'
@@ -134,6 +134,35 @@ class FastTrackBatchTests(unittest.TestCase):
         self.assertEqual(self.request(path, payload)[0], 200, 'deselected missing role does not block')
         _, refreshed = self.request('/api/lote/fast-track')
         self.assertEqual(json.loads(refreshed)['rows'][1]['academico_nome'], '', 'manual choice is not persisted')
+
+    def test_manual_add_edit_delete_exports_reviewed_rows_without_changing_sources(self):
+        import hashlib
+
+        sources = list(self.root.rglob('*.xlsx'))
+        before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
+        _, body = self.request('/api/lote/fast-track')
+        data = json.loads(body)
+        edited = dict(data['rows'][0], polo='Polo corrigido', selecionado=True, assunto='',
+                      para='corrigido@example.test')
+        added = dict(edited, polo='Novo polo', para='novo@example.test')
+        payload = dict(data, rows=[edited, added], aprovado=True, remetente='', assunto='Ignorar padrão global')
+        status, body = self.request('/api/lote/fast-track/pacote', payload)
+        self.assertEqual(status, 200, body)
+        with zipfile.ZipFile(BytesIO(body)) as archive:
+            manifest = json.loads(archive.read('lote.json'))
+            self.assertEqual({r['para'] for r in manifest['rows']}, {'corrigido@example.test', 'novo@example.test'})
+            self.assertEqual({r['assunto'] for r in manifest['rows']},
+                             {data['rows'][0]['assunto'].replace('Polo A', name) for name in ('Polo corrigido', 'Novo polo')})
+            self.assertEqual(archive.read('mensagem.html'), data['html'].encode())
+        self.assertEqual({p: hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}, before)
+        _, refreshed = self.request('/api/lote/fast-track')
+        self.assertEqual(json.loads(refreshed)['rows'], data['rows'])
+        for invalid in ('', '   ', '\nPolo', 'x' * 256, '🔥'):
+            with self.subTest(polo=invalid):
+                added['polo'] = invalid
+                self.assertEqual(self.request('/api/lote/fast-track/pacote', payload)[0], 400)
+        added['polo'] = '  PÓLO   corrigido '
+        self.assertEqual(self.request('/api/lote/fast-track/pacote', payload)[0], 400, 'normalized duplicate')
 
     def test_bad_source_schema_and_formulas_fail_without_falling_back(self):
         from openpyxl import load_workbook

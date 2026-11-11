@@ -38,9 +38,12 @@ Padrão do assunto (o marcador final é substituído pelo nome do polo):
 - **Para** vem do gestor do polo; **CC** é preenchido com negócios e infraestrutura. O **acadêmico em CC** aparece em seletor separado, com nome e email, e é acrescentado ao CC final no pacote.
 - Se não houver vínculo acadêmico, escolha manualmente um cadastrado para aquele polo. A exportação é bloqueada se qualquer polo selecionado estiver sem acadêmico ou sem email válido em Para. A escolha vale só para esta preparação; não cria vínculo nem altera as bases.
 - Nenhum polo é selecionado automaticamente. Use a busca por polo/gestor, **Selecionar visíveis**, os checkboxes individuais ou **Limpar seleção inteira**. A busca não desmarca seleções fora do filtro: confira o contador total antes de baixar.
-- Uma mensagem por polo selecionado, mesmo se dois polos tiverem os mesmos destinatários. Não há agrupamento por gestor. Um polo repetido ou fora da união atual de pendências é recusado pelo servidor. Cada registro mostra qual checklist motivou sua inclusão.
+- Uma mensagem por polo selecionado, mesmo se dois polos tiverem os mesmos destinatários. Não há agrupamento por gestor. Nomes vazios ou polos selecionados repetidos (ignorando acentos, caixa e espaços extras) são recusados pelo servidor. Cada registro carregado mostra qual checklist motivou sua inclusão; inclusões manuais ficam identificadas.
+- Use **Adicionar item** para incluir um polo mesmo fora da lista automática (até 500 itens). Preencha o nome, Para, CC/CCO, assunto e escolha um acadêmico cadastrado; depois marque **Incluir esta mensagem**.
+- Edite o **Nome do polo** e os contatos diretamente nos campos. O assunto acompanha a mudança de nome enquanto estiver no padrão automático; um assunto personalizado é preservado. Alterar o nome não recarrega contatos: revise todos eles.
+- Use **Excluir item** e confirme para remover uma linha somente deste lote. Mesmo após excluir todas, **Adicionar item** continua disponível. Inclusão, edição e exclusão exigem nova confirmação de revisão antes do download.
 - Para, CC, CCO e assuntos são revisáveis. Um polo não encontrado na gerencial continua visível com contatos em branco para complemento manual. Registros de expansão sem identificação segura não são associados por semelhança de cidade, mesmo se o ID estiver ausente ou `#N/A`. Desmarcar um polo remove suas exigências de preenchimento.
-- Recarregar os polos descarta a revisão dos contatos. Saindo da página, as escolhas não são persistidas. Nenhum contato é enviado em parâmetros da URL.
+- Recarregar os polos descarta inclusões, edições e exclusões deste lote; as bases originais não são alteradas. Saindo da página, as escolhas não são persistidas. Nenhum contato é enviado em parâmetros da URL.
 
 ### Alternativa manual anterior
 

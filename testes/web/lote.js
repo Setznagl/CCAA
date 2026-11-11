@@ -5,7 +5,7 @@
   const preview = $('batch-preview'), build = $('batch-build'), approved = $('batch-approved');
   let html = '', rows = [], revision = 0, htmlVersion = 0, sheetVersion = 0;
   let busy = false;
-  let fixedBatch = false, auditors = [];
+  let fixedBatch = false, auditors = [], subjectPrefix = '';
   function message(text, error = false) {
     status.textContent = text;
     status.setAttribute('role', error ? 'alert' : 'status');
@@ -15,6 +15,8 @@
     const pending = fixedBatch ? rows.filter(row => row.selecionado && (!row.para.trim() || !row.academico_nome)).length : 0;
     $('batch-count').textContent = `${count} mensagem(ns) selecionada(s) de ${rows.length} linha(s).${pending ? ` ${pending} polo(s) selecionado(s) com gestor ou acadêmico pendente.` : ''}`;
     $('batch-selection').hidden = !rows.length;
+    $('batch-add-row').hidden = !fixedBatch || !html;
+    $('batch-add-row').disabled = rows.length >= 500;
     $('batch-subject').disabled = fixedBatch;
     build.disabled = busy || !html || !count;
     $('batch-preview-button').disabled = !html;
@@ -47,6 +49,15 @@
     rows.forEach(row => { row.selecionado = false; });
     invalidate(); drawRows();
   });
+  $('batch-add-row').addEventListener('click', () => {
+    if (!fixedBatch || !html || rows.length >= 500) return;
+    rows.push({selecionado: false, polo: '', para: '', cc: '', cco: '', assunto: '',
+      academico_nome: '', gestor: '', pendencias: ['Inclusão manual']});
+    $('batch-search').value = '';
+    invalidate(); drawRows();
+    roster.lastElementChild.querySelector('[data-field=polo]').focus();
+    message('Polo adicionado. Preencha nome, contatos e acadêmico; selecione a mensagem após revisar.');
+  });
   function drawRows() {
     roster.replaceChildren();
     rows.forEach((row, index) => {
@@ -69,14 +80,39 @@
       selectedLabel.append(selection, document.createTextNode('Incluir esta mensagem'));
       fieldset.append(selectedLabel);
       const fields = document.createElement('div'); fields.className = 'batch-fields';
-      for (const [key, title] of [['para', 'Para'], ['cc', 'CC'], ['cco', 'CCO'], ['assunto', 'Assunto da linha (opcional)']]) {
+      const remove = document.createElement('button');
+      if (fixedBatch) {
+        remove.type = 'button'; remove.dataset.action = 'delete'; remove.textContent = 'Excluir item';
+        remove.setAttribute('aria-label', `Excluir ${row.polo || 'linha ' + (index + 1)}`);
+        remove.addEventListener('click', () => {
+          if (!confirm(`Excluir ${row.polo || 'este item'} do lote? As bases originais não serão alteradas.`)) return;
+          rows.splice(index, 1);
+          invalidate(); drawRows();
+          const next = [...roster.children].find(item => !item.hidden);
+          (next ? next.querySelector('[data-action=delete]') : $('batch-add-row')).focus();
+          message('Item excluído somente deste lote. Revise novamente antes de baixar.');
+        });
+      }
+      const editableFields = [['para', 'Para'], ['cc', 'CC'], ['cco', 'CCO'], ['assunto', 'Assunto da linha (opcional)']];
+      if (fixedBatch) editableFields.unshift(['polo', 'Nome do polo (editável)']);
+      for (const [key, title] of editableFields) {
         const group = document.createElement('div'), label = document.createElement('label'), input = document.createElement('input');
         input.id = `batch-${index}-${key}`; input.dataset.field = key; input.value = row[key];
-        input.type = 'text'; input.maxLength = key === 'assunto' ? 255 : 2000;
-        input.required = key === 'para' && row.selecionado;
+        input.type = 'text'; input.maxLength = ['polo', 'assunto'].includes(key) ? 255 : 2000;
+        input.required = ['para', 'polo'].includes(key) && row.selecionado;
         label.htmlFor = input.id; label.textContent = fixedBatch && key === 'cc' ? 'CC — negócios e infraestrutura (editável)' : title;
         if (fixedBatch && key === 'assunto') label.textContent = 'Assunto do polo (preenchido automaticamente, revisável)';
-        input.addEventListener('input', () => { row[key] = input.value; });
+        input.addEventListener('input', () => {
+          if (fixedBatch && key === 'polo') {
+            if (!row.assunto.trim() || row.assunto === subjectPrefix + row.polo.trim()) {
+              row.assunto = input.value.trim() ? subjectPrefix + input.value.trim() : '';
+              fields.querySelector('[data-field=assunto]').value = row.assunto;
+            }
+            legend.textContent = `Linha ${index + 1}${input.value ? ' — ' + input.value : ''}`;
+            remove.setAttribute('aria-label', `Excluir ${input.value || 'linha ' + (index + 1)}`);
+          }
+          row[key] = input.value;
+        });
         group.append(label, input); fields.append(group);
       }
       if (fixedBatch) {
@@ -95,10 +131,15 @@
       selection.addEventListener('input', () => {
         row.selecionado = selection.checked;
         fields.querySelector('[data-field=para]').required = row.selecionado;
-        if (fixedBatch) fields.querySelector('[data-field=academico_nome]').required = row.selecionado;
+        if (fixedBatch) {
+          fields.querySelector('[data-field=academico_nome]').required = row.selecionado;
+          fields.querySelector('[data-field=polo]').required = row.selecionado;
+        }
         refresh();
       });
-      fieldset.append(fields); roster.append(fieldset);
+      fieldset.append(fields);
+      if (fixedBatch) fieldset.append(remove);
+      roster.append(fieldset);
     });
     filterRows();
     refresh();
@@ -126,7 +167,7 @@
       const data = await response.json();
       if (sheet !== sheetVersion || content !== htmlVersion) return;
       if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as pendências');
-      html = data.html; rows = data.rows; auditors = data.auditores;
+      html = data.html; rows = data.rows; auditors = data.auditores; subjectPrefix = data.assunto_prefixo;
       invalidate(); drawRows();
       message('Pendências carregadas, sem seleção automática. Revise contatos e assuntos por polo, complete o acadêmico quando faltar e confira o comunicado com prazo de 20/11/2026.');
     } catch (error) {

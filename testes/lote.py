@@ -64,7 +64,7 @@ def fast_track_batch(root):
                          cc=cc, cco='', assunto=FAST_TRACK_SUBJECT + polo, pendencias=record['pendencias'],
                          gestor=contact.get('gestor', ''),
                          academico_nome=contact.get('academico_nome', '')))
-    return {'rows': rows, 'auditores': directory['auditores'],
+    return {'rows': rows, 'auditores': directory['auditores'], 'assunto_prefixo': FAST_TRACK_SUBJECT,
             'html': render_fast_track(root).decode('utf-8')}
 
 
@@ -188,7 +188,6 @@ def build_fast_track_package(root, payload):
     source_rows = payload.get('rows')
     if not isinstance(source_rows, list) or not 1 <= len(source_rows) <= MAX_ROWS:
         raise ValueError('Revise entre 1 e 500 polos')
-    allowed = {key(row['polo']): row for row in current['rows']}
     auditors = {auditor['nome']: auditor['email'] for auditor in current['auditores']}
     rows, seen = [], set()
     for row in source_rows:
@@ -196,15 +195,16 @@ def build_fast_track_package(root, payload):
             raise ValueError('Polo: seleção inválida')
         if not row['selecionado']:
             continue
-        polo = key(text(row.get('polo', ''), 'Polo'))
-        if polo not in allowed or polo in seen:
-            raise ValueError('Polo repetido ou fora da lista de checklists pendentes')
+        name = text(row.get('polo', ''), 'Polo', 255)
+        polo = key(name)
+        if not polo or polo in seen:
+            raise ValueError('Informe um nome de polo não vazio e sem repetição')
         seen.add(polo)
         academic = text(row.get('academico_nome', ''), 'Acadêmico')
         if academic not in auditors:
             raise ValueError('Complete a escolha do acadêmico cadastrado em cada polo selecionado')
         cc = addresses(row.get('cc', ''), 'CC')
-        subject = text(row.get('assunto', ''), 'Assunto do polo', 255) or allowed[polo]['assunto']
+        subject = text(row.get('assunto', ''), 'Assunto do polo', 255) or text(FAST_TRACK_SUBJECT + name, 'Assunto do polo', 255)
         rows.append(dict(row, polo=polo, assunto=subject, cc=';'.join(filter(None, [cc, auditors[academic]]))))
     return build_package(dict(payload, html=current['html'], rows=rows), per_polo=True)
 
